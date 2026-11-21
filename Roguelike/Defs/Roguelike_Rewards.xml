@@ -37,6 +37,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_MedKit</defName>
+    <rarity>Rare</rarity>
     <requiresUnlock>true</requiresUnlock>
     <label>Glitterworld Med Kit</label>
     <description>At the start of each node, cures the worst health condition of one colonist.</description>
@@ -46,6 +47,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_Barometer</defName>
+    <rarity>Uncommon</rarity>
     <label>Calm Barometer</label>
     <description>Weather modifiers hold off 1.5 days longer.</description>
     <iconThing>Silver</iconThing>
@@ -54,6 +56,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_Chronometer</defName>
+    <rarity>Uncommon</rarity>
     <label>Pacing Chronometer</label>
     <description>Falling behind pace speeds the weather up much less.</description>
     <iconThing>Gold</iconThing>
@@ -62,6 +65,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_PackFrame</defName>
+    <rarity>Uncommon</rarity>
     <label>Pack Frame</label>
     <description>Colonists can carry 40% more in caravans.</description>
     <iconThing>Steel</iconThing>
@@ -86,6 +90,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_WorkGloves</defName>
+    <rarity>Rare</rarity>
     <label>Work Gloves</label>
     <description>Colonists work 15% faster.</description>
     <iconThing>ComponentIndustrial</iconThing>
@@ -102,6 +107,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_SteelLungs</defName>
+    <rarity>Uncommon</rarity>
     <requiresUnlock>true</requiresUnlock>
     <label>Steel Lungs</label>
     <description>Colonists resist toxic buildup.</description>
@@ -111,6 +117,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_PsychicDampener</defName>
+    <rarity>Uncommon</rarity>
     <requiresUnlock>true</requiresUnlock>
     <label>Psychic Dampener</label>
     <description>Colonists are less sensitive to psychic effects.</description>

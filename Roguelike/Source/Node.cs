@@ -488,6 +488,12 @@ namespace Roguelike
             Find.LetterStack.ReceiveLetter(letter);
         }
 
+        public override void MapComponentOnGUI()
+        {
+            if (Active && map == Find.CurrentMap && !WorldRendererUtility.WorldSelected && Find.UIRoot.screenshotMode?.FiltersCurrentEvent != true)
+                NodeHud.Draw(this);
+        }
+
         public override void ExposeData()
         {
             Scribe_Defs.Look(ref preset, "preset");

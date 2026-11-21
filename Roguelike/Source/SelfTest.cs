@@ -133,6 +133,7 @@ namespace Roguelike
             "starter" => Starter(),
             "newrun" => NewRunScript(),
             "disasters" => Disasters(),
+            "polish" => Polish(),
             _ => Unknown(mode),
         };
 
@@ -898,6 +899,39 @@ namespace Roguelike
             SelfTest.Check(Water(TerrainDefOf.WaterDeep) > deepBefore, "flood: deep water follows behind the front");
             Find.CameraDriver.JumpToCurrentMapLoc(map.Center);
             foreach (var w in Screenshot("s5_flood", world: false)) yield return w;
+        }
+
+        /// <summary>Node icons, the HUD panel and relic rarity.</summary>
+        private static IEnumerable<Func<bool>> Polish()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            var kinds = Enum.GetNames(typeof(NodeKind)).Append("Boss").ToList();
+            SelfTest.Check(kinds.All(NodeIcons.Has), $"node icons loaded for all {kinds.Count} kinds");
+            var markers = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().ToList();
+            SelfTest.Check(markers.All(m => m.ExpandingIcon == NodeIcons.For(m.Node)), "every marker uses its kind's icon");
+            CameraJumper.TryJump(markers.First(m => m.Node.state == RunNodeState.Current));
+            Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(run.Row(2).First().tile));
+            foreach (var w in Screenshot("s5_icons", world: true)) yield return w;
+
+            // HUD after the grace period.
+            var map = Find.CurrentMap;
+            var comp = NodeComp(map);
+            comp.startTick -= (int)((comp.GraceDays + 1f) * GenDate.TicksPerDay);
+            comp.AdvanceThreat(1.5f);
+            CameraJumper.TryJump(new GlobalTargetInfo(map.mapPawns.FreeColonistsSpawned.First().Position, map));
+            foreach (var w in Screenshot("s5_hud", world: false)) yield return w;
+
+            // Rarity.
+            var rare = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_WorkGloves");
+            var uncommon = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_Barometer");
+            var common = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_HardyBoots");
+            var cards = new List<RewardCard> { new RewardCard { kind = RewardKind.Relic, relic = common }, new RewardCard { kind = RewardKind.Relic, relic = uncommon }, new RewardCard { kind = RewardKind.Relic, relic = rare } };
+            SelfTest.Check(cards[0].KindLabel == "Relic" && cards[1].KindLabel == "Uncommon relic" && cards[2].KindLabel == "Rare relic", "relic cards show their rarity");
+            SelfTest.Check(rare.Weight < uncommon.Weight && uncommon.Weight < common.Weight, "rarer relics are drawn less often");
+            Find.WindowStack.Add(new Dialog_RewardPick(cards, "Self-test: rarity", null));
+            foreach (var w in Screenshot("s5_rarity", world: false)) yield return w;
+            Find.WindowStack.WindowOfType<Dialog_RewardPick>()?.Close(false);
         }
 
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>

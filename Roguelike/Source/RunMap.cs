@@ -537,6 +537,9 @@ namespace Roguelike
             }
         }
 
+        /// <summary>Each node kind has its own icon (Textures/Roguelike/Nodes), tinted by state.</summary>
+        public override Texture2D ExpandingIcon => NodeIcons.For(Node) ?? base.ExpandingIcon;
+
         public override Color ExpandingIconColor
         {
             get

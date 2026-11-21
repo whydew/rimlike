@@ -33,7 +33,7 @@
 
   <Target Name="DeployMod" AfterTargets="Build" Condition="'$(DeployDir)' != 'none'">
     <ItemGroup>
-      <ModFiles Include="..\About\**;..\Defs\**;..\Assemblies\**" />
+      <ModFiles Include="..\About\**;..\Defs\**;..\Assemblies\**;..\Textures\**" />
     </ItemGroup>
     <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(DeployDir)\%(RelativeDir)%(Filename)%(Extension)'->Replace('..\', ''))" SkipUnchangedFiles="true" />
   </Target>

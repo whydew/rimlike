@@ -13,6 +13,9 @@ namespace Roguelike
     public class RelicDef : Def
     {
         public ThingDef iconThing;
+        public RelicRarity rarity = RelicRarity.Common;
+        /// <summary>Draw weight: common 3, uncommon 2, rare 1.</summary>
+        public float Weight => rarity == RelicRarity.Rare ? 1f : rarity == RelicRarity.Uncommon ? 2f : 3f;
         public bool starterOnly;
         public bool requiresUnlock;
         public HediffDef hediff;
@@ -86,7 +89,7 @@ namespace Roguelike
 
         public string KindLabel => kind switch
         {
-            RewardKind.Relic => "Relic",
+            RewardKind.Relic => relic.rarity == RelicRarity.Common ? "Relic" : $"{relic.rarity} relic",
             RewardKind.Gear => "Gear",
             RewardKind.Implant => "Implant",
             RewardKind.Blueprint => "Blueprint",
@@ -96,7 +99,7 @@ namespace Roguelike
 
         public Color KindColor => kind switch
         {
-            RewardKind.Relic => new Color(0.85f, 0.7f, 0.25f),
+            RewardKind.Relic => relic.rarity == RelicRarity.Rare ? new Color(0.95f, 0.55f, 0.15f) : relic.rarity == RelicRarity.Uncommon ? new Color(0.55f, 0.6f, 0.95f) : new Color(0.85f, 0.7f, 0.25f),
             RewardKind.Gear => new Color(0.45f, 0.6f, 0.8f),
             RewardKind.Implant => new Color(0.3f, 0.75f, 0.7f),
             RewardKind.Blueprint => new Color(0.85f, 0.5f, 0.25f),
@@ -127,7 +130,7 @@ namespace Roguelike
             {
                 if (nodeReward == RunRewardKind.Relics)
                 {
-                    var relic = RelicPool(run).Where(r => cards.All(c => c.relic != r)).RandomElementWithFallback();
+                    var relic = RelicPool(run).Where(r => cards.All(c => c.relic != r)).RandomElementByWeightWithFallback(r => r.Weight);
                     if (relic != null) { cards.Add(new RewardCard { kind = RewardKind.Relic, relic = relic }); continue; }
                 }
                 var card = nodeReward == RunRewardKind.Recruits || Rand.Chance(RecruitChanceInStandardPool)
@@ -153,7 +156,7 @@ namespace Roguelike
             var kind = options.RandomElementByWeight(o => o.weight).kind;
             return kind switch
             {
-                RewardKind.Relic => new RewardCard { kind = kind, relic = relics.RandomElement() },
+                RewardKind.Relic => new RewardCard { kind = kind, relic = relics.RandomElementByWeight(r => r.Weight) },
                 RewardKind.Gear => new RewardCard { kind = kind, gear = gear.RandomElement() },
                 RewardKind.Implant => new RewardCard { kind = kind, gear = implants.RandomElement() },
                 _ => new RewardCard { kind = kind, blueprint = blueprints.RandomElement() },
