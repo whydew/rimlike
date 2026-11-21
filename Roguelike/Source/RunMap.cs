@@ -74,12 +74,14 @@ namespace Roguelike
         public List<BlueprintGroupDef> blueprints = new List<BlueprintGroupDef>();
         /// <summary>Node whose reward screen hasn't been resolved yet (reopened after loading a save).</summary>
         public int pendingRewardNodeId = -1;
+        /// <summary>Meta points earned during this run (shown on the end-of-run screen).</summary>
+        public int pointsEarned;
 
         public bool RunOver => runWon || runLost;
 
         // ---------- Relics and blueprints ----------
 
-        public float GraceDaysOffset => relics.Sum(r => r.graceDaysOffset);
+        public float GraceDaysOffset => relics.Sum(r => r.graceDaysOffset) + MetaProgress.GraceDaysOffset;
         public float WeatherRateFactor => relics.Aggregate(1f, (f, r) => f * r.weatherRateFactor);
         public float MaxPaceFactorFactor => relics.Aggregate(1f, (f, r) => f * r.maxPaceFactorFactor);
 
@@ -112,6 +114,12 @@ namespace Roguelike
             Find.WindowStack.Add(new Dialog_RewardPick(cards, $"{node.preset.LabelCap} cleared", card =>
             {
                 if (card != null) RewardUtility.Apply(card, map, map == null ? Find.WorldObjects.Caravans.FirstOrDefault(c => c.IsPlayerControlled) : null);
+                else
+                {
+                    // Skipping a reward is worth a meta point.
+                    pointsEarned++;
+                    MetaProgress.Award(1);
+                }
                 pendingRewardNodeId = -1;
             }));
         }
@@ -156,7 +164,8 @@ namespace Roguelike
         {
             if (!active || RunOver) return;
             runLost = true;
-            Find.LetterStack.ReceiveLetter("Run over", reason + "\n\n(Prototype: the end-of-run screen and unlocks come in stage 4.)", LetterDefOf.NegativeEvent);
+            MetaProgress.RecordRunEnd(false);
+            Find.WindowStack.Add(new Dialog_RunEnd(false, reason));
         }
 
         public override void WorldComponentTick()
@@ -189,12 +198,14 @@ namespace Roguelike
             var node = NodeAt(tile);
             if (!active || node == null || node.state != RunNodeState.Current) return;
             node.state = RunNodeState.Completed;
+            int points = node.IsBoss ? 5 : 1;
+            pointsEarned += points;
+            MetaProgress.Award(points);
             if (node.IsBoss)
             {
                 runWon = true;
-                Find.LetterStack.ReceiveLetter("Act complete",
-                    "You've beaten the boss node. The run is won.\n\n(Prototype: rewards, more acts and the end-of-run screen come in later stages.)",
-                    LetterDefOf.PositiveEvent);
+                MetaProgress.RecordRunEnd(true);
+                Find.WindowStack.Add(new Dialog_RunEnd(true, "You beat the boss and cleared the act."));
                 return;
             }
             foreach (int id in node.next) NodeById(id).state = RunNodeState.Available;
@@ -394,6 +405,7 @@ namespace Roguelike
             Scribe_Values.Look(ref runWon, "runWon");
             Scribe_Values.Look(ref runLost, "runLost");
             Scribe_Values.Look(ref pendingRewardNodeId, "pendingRewardNodeId", -1);
+            Scribe_Values.Look(ref pointsEarned, "pointsEarned");
             Scribe_Collections.Look(ref relics, "relics", LookMode.Def);
             Scribe_Collections.Look(ref blueprints, "blueprints", LookMode.Def);
             relics ??= new List<RelicDef>();

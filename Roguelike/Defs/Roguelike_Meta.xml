@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===================== Starter loadouts =====================
+    Each is a scenario with a ScenPart_RoguelikeRun that names its signature relic.
+    Locked starters (requiresUnlock) are hidden from the scenario list until bought.
+  -->
+
+  <ScenarioDef ParentName="ScenarioBase">
+    <defName>Roguelike_TribalHunters</defName>
+    <label>Roguelike: Tribal Hunters</label>
+    <description>Five hunters and their pack animals set out to cross a hostile land. Many hands and strong backs, but little technology.</description>
+    <scenario>
+      <summary>Five weak tribal hunters with bows and two pack muffalo.</summary>
+      <playerFaction>
+        <factionDef>PlayerTribe</factionDef>
+      </playerFaction>
+      <parts>
+        <li Class="ScenPart_ConfigPage_ConfigureStartingPawns">
+          <def>ConfigPage_ConfigureStartingPawns</def>
+          <pawnCount>5</pawnCount>
+          <pawnChoiceCount>8</pawnChoiceCount>
+        </li>
+        <li Class="ScenPart_PlayerPawnsArriveMethod">
+          <def>PlayerPawnsArriveMethod</def>
+          <method>Standing</method>
+        </li>
+        <li Class="ScenPart_StartingThing_Defined">
+          <def>StartingThing_Defined</def>
+          <thingDef>Bow_Recurve</thingDef>
+          <count>3</count>
+        </li>
+        <li Class="ScenPart_StartingThing_Defined">
+          <def>StartingThing_Defined</def>
+          <thingDef>Pemmican</thingDef>
+          <count>150</count>
+        </li>
+        <li Class="ScenPart_StartingThing_Defined">
+          <def>StartingThing_Defined</def>
+          <thingDef>MedicineHerbal</thingDef>
+          <count>15</count>
+        </li>
+        <li Class="ScenPart_StartingAnimal">
+          <def>StartingAnimal</def>
+          <animalKind>Muffalo</animalKind>
+          <count>2</count>
+          <bondToRandomPlayerPawnChance>0</bondToRandomPlayerPawnChance>
+        </li>
+        <li Class="Roguelike.ScenPart_RoguelikeRun">
+          <def>Roguelike_Run</def>
+          <starterId>tribalHunters</starterId>
+          <requiresUnlock>true</requiresUnlock>
+          <starterRelic>Roguelike_Relic_HerdBond</starterRelic>
+        </li>
+      </parts>
+    </scenario>
+  </ScenarioDef>
+
+  <ScenarioDef ParentName="Crashlanded">
+    <defName>Roguelike_IceNomads</defName>
+    <label>Roguelike: Ice Nomads</label>
+    <description>Three hardened nomads who have lived through worse winters than this. They come dressed for the cold.</description>
+    <scenario>
+      <summary>Three crashlanded nomads in tundra gear.</summary>
+      <parts>
+        <li Class="ScenPart_StartingThing_Defined">
+          <def>StartingThing_Defined</def>
+          <thingDef>Apparel_Parka</thingDef>
+          <stuff>Synthread</stuff>
+          <count>3</count>
+        </li>
+        <li Class="Roguelike.ScenPart_RoguelikeRun">
+          <def>Roguelike_Run</def>
+          <starterId>iceNomads</starterId>
+          <requiresUnlock>true</requiresUnlock>
+          <starterRelic>Roguelike_Relic_ThermalLining</starterRelic>
+        </li>
+      </parts>
+    </scenario>
+  </ScenarioDef>
+
+  <!-- ===================== Unlocks =====================
+    Bought with meta points earned across runs. Starter and variety unlocks add options;
+    power unlocks make every later run a little easier.
+  -->
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_TribalHunters</defName>
+    <label>Tribal Hunters starter</label>
+    <description>Five tribal hunters with bows and two pack muffalo. Relic: Herd Bond.</description>
+    <cost>6</cost>
+    <starterId>tribalHunters</starterId>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_IceNomads</defName>
+    <label>Ice Nomads starter</label>
+    <description>Three nomads in parkas. Relic: Thermal Lining.</description>
+    <cost>6</cost>
+    <starterId>iceNomads</starterId>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_MedKit</defName>
+    <label>Relic: Glitterworld Med Kit</label>
+    <description>Adds the Glitterworld Med Kit to the relic pool.</description>
+    <cost>3</cost>
+    <relic>Roguelike_Relic_MedKit</relic>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_SteelLungs</defName>
+    <label>Relic: Steel Lungs</label>
+    <description>Adds Steel Lungs to the relic pool.</description>
+    <cost>3</cost>
+    <relic>Roguelike_Relic_SteelLungs</relic>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_PsychicDampener</defName>
+    <label>Relic: Psychic Dampener</label>
+    <description>Adds the Psychic Dampener to the relic pool.</description>
+    <cost>3</cost>
+    <relic>Roguelike_Relic_PsychicDampener</relic>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_BP_Power</defName>
+    <label>Blueprints: Power</label>
+    <description>Adds the Power blueprint group to the draft pool.</description>
+    <cost>4</cost>
+    <blueprint>Roguelike_BP_Power</blueprint>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_BP_Medical</defName>
+    <label>Blueprints: Medical</label>
+    <description>Adds the Medical blueprint group to the draft pool.</description>
+    <cost>3</cost>
+    <blueprint>Roguelike_BP_Medical</blueprint>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_ShieldBelt</defName>
+    <label>Gear: Shield belt</label>
+    <description>Adds the shield belt to the gear pool.</description>
+    <cost>3</cost>
+    <gear>Roguelike_Gear_ShieldBelt</gear>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_Sniper</defName>
+    <label>Gear: Sniper rifle</label>
+    <description>Adds the sniper rifle to the gear pool.</description>
+    <cost>2</cost>
+    <gear>Roguelike_Gear_SniperRifle</gear>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_HeadStart</defName>
+    <label>Head start</label>
+    <description>Every node's weather holds off one day longer.</description>
+    <cost>5</cost>
+    <graceDaysOffset>1</graceDaysOffset>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_LuckyDraw</defName>
+    <label>Lucky draw</label>
+    <description>One extra card at every reward screen.</description>
+    <cost>8</cost>
+    <extraRewardChoices>1</extraRewardChoices>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_FieldRations</defName>
+    <label>Field rations</label>
+    <description>Start every run with 20 packaged survival meals.</description>
+    <cost>3</cost>
+    <startThings>
+      <MealSurvivalPack>20</MealSurvivalPack>
+    </startThings>
+  </Roguelike.UnlockDef>
+
+  <Roguelike.UnlockDef>
+    <defName>Roguelike_Unlock_VeteranKit</defName>
+    <label>Veteran kit</label>
+    <description>Start every run with two flak vests.</description>
+    <cost>4</cost>
+    <startThings>
+      <Apparel_FlakVest>2</Apparel_FlakVest>
+    </startThings>
+  </Roguelike.UnlockDef>
+
+</Defs>

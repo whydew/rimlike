@@ -7,7 +7,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Mode,
     [string]$OutDir = "",
-    [int]$TimeoutSeconds = 600
+    [int]$TimeoutSeconds = 600,
+    [string]$Scenario = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +34,9 @@ try {
     $cfg.Save($modsConfig)
 
     $started = Get-Date
-    $p = Start-Process -FilePath (Join-Path $game "RimWorld.exe") -ArgumentList "-quicktest", "-roguelikeSelfTest=$Mode" -PassThru
+    $gameArgs = @("-quicktest", "-roguelikeSelfTest=$Mode")
+    if ($Scenario) { $gameArgs += "-roguelikeScenario=$Scenario" }
+    $p = Start-Process -FilePath (Join-Path $game "RimWorld.exe") -ArgumentList $gameArgs -PassThru
     $done = $false
     while (((Get-Date) - $started).TotalSeconds -lt $TimeoutSeconds) {
         Start-Sleep -Seconds 3

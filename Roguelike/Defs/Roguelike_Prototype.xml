@@ -92,13 +92,15 @@
 
   <ScenarioDef ParentName="Crashlanded">
     <defName>Roguelike_RunScenario</defName>
-    <label>Roguelike run</label>
+    <label>Roguelike: Crashlanded</label>
     <description>Three survivors crashland on a starting node of their choosing. Complete each node's objective before its weather turns deadly.</description>
     <scenario>
       <summary>Prototype roguelike run: choose a starting node on the world map.</summary>
       <parts>
         <li Class="Roguelike.ScenPart_RoguelikeRun">
           <def>Roguelike_Run</def>
+          <starterId>crashlanded</starterId>
+          <starterRelic>Roguelike_Relic_BlackBox</starterRelic>
         </li>
       </parts>
     </scenario>

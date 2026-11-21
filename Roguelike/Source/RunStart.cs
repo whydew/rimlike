@@ -24,8 +24,23 @@ namespace Roguelike
             return node != null && node.row == 0 && node.state == RunNodeState.Available ? node : null;
         }
 
+        /// <summary>Starter loadout id; locked starters are hidden until bought with meta points.</summary>
+        public string starterId = "crashlanded";
+        public bool requiresUnlock;
+        /// <summary>The starter's fixed signature relic.</summary>
+        public RelicDef starterRelic;
+
         public override string Summary(Scenario scen) =>
-            "Travel a branching act of nodes on the world map, ending in a boss. Each node has an objective and worsening weather.";
+            "Travel a branching act of nodes on the world map, ending in a boss. Each node has an objective and worsening weather." +
+            (starterRelic != null ? $"\n\nSignature relic: {starterRelic.LabelCap}. {starterRelic.description}" : "");
+
+        public override void ExposeData()
+        {
+            base.ExposeData();
+            Scribe_Values.Look(ref starterId, "starterId", "crashlanded");
+            Scribe_Values.Look(ref requiresUnlock, "requiresUnlock");
+            Scribe_Defs.Look(ref starterRelic, "starterRelic");
+        }
 
         public override void PostWorldGenerate() => WorldComponent_RoguelikeRun.Get?.GenerateAct();
 
@@ -41,11 +56,25 @@ namespace Roguelike
         public override void PostGameStart()
         {
             var map = Find.CurrentMap;
-            var node = WorldComponent_RoguelikeRun.Get?.BeginAt(Find.GameInfo.startingTile);
+            var run = WorldComponent_RoguelikeRun.Get;
+            var node = run?.BeginAt(Find.GameInfo.startingTile);
             if (map == null || node?.preset == null)
             {
                 Log.Warning("[Roguelike] No starting node found at the landing tile; this run has no node objective.");
                 return;
+            }
+            run.AddRelic(starterRelic);
+            // Power unlocks that hand out starting supplies.
+            foreach (var t in MetaProgress.StartThings)
+            {
+                int left = t.count;
+                while (left > 0)
+                {
+                    var thing = ThingMaker.MakeThing(t.thingDef, t.thingDef.MadeFromStuff ? GenStuff.DefaultStuffFor(t.thingDef) : null);
+                    thing.stackCount = System.Math.Min(left, t.thingDef.stackLimit);
+                    left -= thing.stackCount;
+                    GenPlace.TryPlaceThing(thing, MapGenerator.PlayerStartSpot.IsValid ? MapGenerator.PlayerStartSpot : map.Center, map, ThingPlaceMode.Near);
+                }
             }
             NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map));
         }

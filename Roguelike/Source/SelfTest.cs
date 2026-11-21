@@ -41,11 +41,13 @@ namespace Roguelike
         public static bool Prefix()
         {
             if (!SelfTest.Enabled) return true;
+            MetaProgress.ResetForSelfTest();
             Current.ProgramState = ProgramState.Entry;
             Game.ClearCaches();
             Current.Game = new Game();
             Current.Game.InitData = new GameInitData();
-            Current.Game.Scenario = DefDatabase<ScenarioDef>.GetNamed("Roguelike_RunScenario").scenario;
+            string scenario = GenCommandLine.TryGetCommandLineArg("roguelikeScenario", out var s) ? s : "Roguelike_RunScenario";
+            Current.Game.Scenario = DefDatabase<ScenarioDef>.GetNamed(scenario).scenario;
             Find.Scenario.PreConfigure();
             Current.Game.storyteller = new Storyteller(StorytellerDefOf.Cassandra, DifficultyDefOf.Rough);
             Current.Game.World = WorldGenerator.GenerateWorld(0.3f, "roguelike-selftest", OverallRainfall.Normal, OverallTemperature.Normal, OverallPopulation.Normal, LandmarkDensity.Normal);
@@ -124,6 +126,8 @@ namespace Roguelike
             "wipe" => Wipe(),
             "rewards" => Rewards(),
             "variety" => Variety(),
+            "meta" => Meta(),
+            "starter" => Starter(),
             _ => Unknown(mode),
         };
 
@@ -151,6 +155,18 @@ namespace Roguelike
             {
                 if (Find.TickManager.Paused) Find.TickManager.CurTimeSpeed = TimeSpeed.Superfast;
                 return Find.TickManager.TicksGame >= until;
+            };
+        }
+
+        /// <summary>Runs time until <paramref name="done"/> (a run-ending screen may pause the game, so this does not count ticks).</summary>
+        private static Func<bool> Until(Func<bool> done)
+        {
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Superfast;
+            return () =>
+            {
+                if (done()) return true;
+                if (Find.TickManager.Paused) Find.TickManager.CurTimeSpeed = TimeSpeed.Superfast;
+                return false;
             };
         }
 
@@ -498,7 +514,8 @@ namespace Roguelike
             node.reward = RunRewardKind.Cards;
             NodeComp(map).Complete();
             var window = RewardWindow;
-            SelfTest.Check(window != null && window.Cards.Count == 3, $"reward screen shows 3 cards (got {window?.Cards.Count ?? 0})");
+            int expectedCards = 3 + run.relics.Sum(r => r.extraRewardChoices) + MetaProgress.ExtraRewardChoices;
+            SelfTest.Check(window != null && window.Cards.Count == expectedCards, $"reward screen shows {expectedCards} cards (got {window?.Cards.Count ?? 0})");
             SelfTest.Check(window != null && window.Cards.All(c => !c.Title.NullOrEmpty() && !Dialog_RewardPick.BodyText(c).NullOrEmpty()), "every card has a title and body text");
             SelfTest.Check(run.pendingRewardNodeId == node.id, "reward is pending until picked");
             Find.CameraDriver.JumpToCurrentMapLoc(colonist.Position);
@@ -545,7 +562,7 @@ namespace Roguelike
 
             // Recruit-only draw and the recruit card layout.
             var recruitCards = RewardUtility.Generate(run, RunRewardKind.Recruits);
-            SelfTest.Check(recruitCards.Count == 3 && recruitCards.All(c => c.kind == RewardKind.Recruit && c.recruit != null), "recruit node draw: 3 recruit cards");
+            SelfTest.Check(recruitCards.Count == expectedCards && recruitCards.All(c => c.kind == RewardKind.Recruit && c.recruit != null), $"recruit node draw: {expectedCards} recruit cards");
             SelfTest.Check(recruitCards.All(c => Dialog_RewardPick.RecruitSummary(c.recruit).Contains("Skills:") && Dialog_RewardPick.RecruitSummary(c.recruit).Contains("Health:")), "recruit cards list skills and health");
             Find.WindowStack.Add(new Dialog_RewardPick(recruitCards, "Self-test: recruits", null));
             foreach (var w in Screenshot("s2_recruit_cards", world: false)) yield return w;
@@ -555,6 +572,103 @@ namespace Roguelike
             SelfTest.Info("relics now: " + string.Join(", ", run.relics.Select(r => r.label)));
         }
 
+        private static UnlockDef Unlock(string name) => DefDatabase<UnlockDef>.GetNamed(name);
+
+        private static bool ScenarioListed(string defName) =>
+            ScenarioLister.ScenariosInCategory(ScenarioCategory.FromDef).Any(s => s == DefDatabase<ScenarioDef>.GetNamed(defName).scenario);
+
+        /// <summary>Meta points, unlocks, locked content, the end-of-run and unlock screens.</summary>
+        private static IEnumerable<Func<bool>> Meta()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            var s = MetaProgress.S;
+            var map = Find.CurrentMap;
+            var comp = NodeComp(map);
+
+            SelfTest.Check(s.points == 0 && s.unlocked.Count == 0, "self-test starts from empty meta progress (in memory only)");
+            SelfTest.Check(run.relics.Contains(DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_BlackBox")), "Crashlanded starts with its signature relic (Ship's Black Box)");
+            SelfTest.Check(RewardUtility.Generate(run, RunRewardKind.Cards).Count == 4, "Black Box: reward draws have 4 cards");
+
+            // Locked content.
+            var medKit = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_MedKit");
+            SelfTest.Check(!RewardUtility.RelicPool(run).Contains(medKit), "locked relic is not in the relic pool");
+            SelfTest.Check(!RewardUtility.BlueprintPool(run).Contains(DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Power")), "locked blueprint group is not in the draft pool");
+            SelfTest.Check(ScenarioListed("Roguelike_RunScenario") && !ScenarioListed("Roguelike_TribalHunters") && !ScenarioListed("Roguelike_IceNomads"),
+                "only the Crashlanded starter is listed before unlocking");
+
+            // Earning points.
+            comp.Complete();
+            SelfTest.Check(s.points == 1 && run.pointsEarned == 1, $"clearing a node earns 1 meta point (have {s.points})");
+            var window = RewardWindow;
+            window?.Skip();
+            yield return () => RewardWindow == null;
+            SelfTest.Check(s.points == 2, $"skipping a reward earns 1 meta point (have {s.points})");
+
+            // Spending points.
+            s.points = 30;
+            SelfTest.Check(MetaProgress.TryBuy(Unlock("Roguelike_Unlock_LuckyDraw")), "an affordable unlock can be bought");
+            SelfTest.Check(MetaProgress.IsUnlocked(Unlock("Roguelike_Unlock_LuckyDraw")) && s.points == 22, $"buying an unlock spends its cost (have {s.points})");
+            SelfTest.Check(RewardUtility.Generate(run, RunRewardKind.Cards).Count == 5, "power unlock (Lucky draw): reward draws grow to 5 cards");
+            MetaProgress.TryBuy(Unlock("Roguelike_Unlock_MedKit"));
+            SelfTest.Check(MetaProgress.IsAvailable(medKit) && RewardUtility.RelicPool(run).Contains(medKit), "variety unlock: the relic joins the pool");
+            float grace = comp.GraceDays;
+            MetaProgress.TryBuy(Unlock("Roguelike_Unlock_HeadStart"));
+            SelfTest.Check(Math.Abs(comp.GraceDays - grace - 1f) < 0.01f, $"power unlock (Head start): grace {grace:0.0} -> {comp.GraceDays:0.0} days");
+            MetaProgress.TryBuy(Unlock("Roguelike_Unlock_TribalHunters"));
+            SelfTest.Check(ScenarioListed("Roguelike_TribalHunters") && !ScenarioListed("Roguelike_IceNomads"), "starter unlock: Tribal Hunters is now listed");
+            SelfTest.Check(!MetaProgress.TryBuy(Unlock("Roguelike_Unlock_TribalHunters")), "an unlock can't be bought twice");
+            int before = s.points;
+            s.points = 1;
+            SelfTest.Check(!MetaProgress.TryBuy(Unlock("Roguelike_Unlock_IceNomads")) && s.points == 1, "can't buy without enough points");
+            s.points = before;
+
+            // Unlock screen.
+            Find.WindowStack.Add(new Dialog_Unlocks());
+            foreach (var w in Screenshot("s4_unlocks", world: false)) yield return w;
+            Find.WindowStack.WindowOfType<Dialog_Unlocks>()?.Close(false);
+
+            // End-of-run screen on a loss.
+            int runs = s.runs;
+            run.Lose("Self-test: the run ends here.");
+            SelfTest.Check(run.runLost && s.runs == runs + 1, "a loss is recorded in meta progress");
+            SelfTest.Check(Find.WindowStack.WindowOfType<Dialog_RunEnd>() != null, "the end-of-run screen opens");
+            foreach (var w in Screenshot("s4_run_end", world: false)) yield return w;
+        }
+
+        /// <summary>The starter given by -roguelikeScenario starts with its pawns, kit and signature relic.</summary>
+        private static IEnumerable<Func<bool>> Starter()
+        {
+            yield return () => Current.ProgramState == ProgramState.Playing && Find.CurrentMap != null;
+            yield return Frames(120);
+            var run = Run;
+            var part = Find.Scenario.AllParts.OfType<ScenPart_RoguelikeRun>().First();
+            var map = Find.CurrentMap;
+            SelfTest.Info($"starter '{part.starterId}': {map.mapPawns.FreeColonistsSpawnedCount} colonists, {map.mapPawns.SpawnedColonyAnimals.Count} animals, relics {string.Join(", ", run.relics.Select(r => r.label))}");
+            SelfTest.Check(part.starterRelic != null && run.relics.Contains(part.starterRelic), $"starter '{part.starterId}': signature relic {part.starterRelic?.label} is owned");
+            SelfTest.Check(run.CurrentNode != null && NodeComp(map) is { Active: true }, $"starter '{part.starterId}': landed on a starting node with an objective");
+            switch (part.starterId)
+            {
+                case "tribalHunters":
+                    SelfTest.Check(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count() == 5, "Tribal Hunters: five colonists");
+                    SelfTest.Check(map.mapPawns.SpawnedColonyAnimals.Count(a => a.def.defName == "Muffalo") == 2, "Tribal Hunters: two pack muffalo");
+                    var muffalo = map.mapPawns.SpawnedColonyAnimals.First(a => a.def.defName == "Muffalo");
+                    SelfTest.Check(MassUtility.Capacity(muffalo) > muffalo.BodySize * 35f * 1.49f, "Herd Bond: pack animals carry 50% more");
+                    break;
+                case "iceNomads":
+                    int parkas = map.listerThings.ThingsOfDef(ThingDefOf.Apparel_Parka).Count
+                                 + map.mapPawns.FreeColonistsSpawned.Sum(p => p.apparel.WornApparel.Count(a => a.def == ThingDefOf.Apparel_Parka));
+                    SelfTest.Check(parkas >= 3, $"Ice Nomads: three parkas ({parkas})");
+                    SelfTest.Check(Math.Abs(run.WeatherRateFactor - 0.7f) < 0.01f, "Thermal Lining: weather worsens 30% slower");
+                    break;
+                default:
+                    SelfTest.Check(run.relics.Any(r => r.extraRewardChoices > 0), "Crashlanded: Black Box adds a reward choice");
+                    break;
+            }
+            Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
+            foreach (var w in Screenshot("s4_starter_" + part.starterId, world: false)) yield return w;
+        }
+
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>
         private static IEnumerable<Func<bool>> LeaveEarly()
         {
@@ -562,7 +676,7 @@ namespace Roguelike
             var run = Run;
             var node = run.CurrentNode;
             LeaveMap(Find.CurrentMap);
-            yield return Ticks(600);
+            yield return Until(() => run.RunOver);
             SelfTest.Check(run.runLost && !run.runWon, $"leaving node {node?.id} early ends the run");
             var other = run.nodes.First(n => n.row == 1);
             SelfTest.Check(!run.CanEnter(other), "no node can be entered after the run is lost");
@@ -574,7 +688,7 @@ namespace Roguelike
             foreach (var w in WaitForGame()) yield return w;
             var run = Run;
             foreach (var p in Find.CurrentMap.mapPawns.FreeColonistsSpawned.ToList()) p.Kill(null);
-            yield return Ticks(600);
+            yield return Until(() => run.RunOver);
             var alive = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.ToList();
             SelfTest.Info($"alive colonists after wipe: {alive.Count} [{string.Join(", ", alive.Select(p => $"{p.LabelShort} dead={p.Dead} spawned={p.Spawned} map={p.MapHeld}"))}]");
             SelfTest.Check(run.runLost, "squad wipe ends the run");

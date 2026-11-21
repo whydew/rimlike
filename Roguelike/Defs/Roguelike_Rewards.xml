@@ -37,6 +37,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_MedKit</defName>
+    <requiresUnlock>true</requiresUnlock>
     <label>Glitterworld Med Kit</label>
     <description>At the start of each node, cures the worst health condition of one colonist.</description>
     <iconThing>MedicineUltratech</iconThing>
@@ -101,6 +102,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_SteelLungs</defName>
+    <requiresUnlock>true</requiresUnlock>
     <label>Steel Lungs</label>
     <description>Colonists resist toxic buildup.</description>
     <iconThing>Chemfuel</iconThing>
@@ -109,6 +111,7 @@
 
   <Roguelike.RelicDef>
     <defName>Roguelike_Relic_PsychicDampener</defName>
+    <requiresUnlock>true</requiresUnlock>
     <label>Psychic Dampener</label>
     <description>Colonists are less sensitive to psychic effects.</description>
     <iconThing>Jade</iconThing>
@@ -173,12 +176,12 @@
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_AdvHelmet</defName><thing>Apparel_AdvancedHelmet</thing><stuff>Plasteel</stuff></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_AssaultRifle</defName><thing>Gun_AssaultRifle</thing></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_ChainShotgun</defName><thing>Gun_ChainShotgun</thing></Roguelike.GearRewardDef>
-  <Roguelike.GearRewardDef><defName>Roguelike_Gear_SniperRifle</defName><thing>Gun_SniperRifle</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_SniperRifle</defName><thing>Gun_SniperRifle</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_HeavySMG</defName><thing>Gun_HeavySMG</thing></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_Longsword</defName><thing>MeleeWeapon_LongSword</thing><stuff>Plasteel</stuff></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_Medicine</defName><thing>MedicineIndustrial</thing><count>12</count></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Gear_Rations</defName><thing>MealSurvivalPack</thing><count>15</count></Roguelike.GearRewardDef>
-  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ShieldBelt</defName><thing>Apparel_ShieldBelt</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ShieldBelt</defName><thing>Apparel_ShieldBelt</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
 
   <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicArm</defName><thing>BionicArm</thing><implant>true</implant></Roguelike.GearRewardDef>
   <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicLeg</defName><thing>BionicLeg</thing><implant>true</implant></Roguelike.GearRewardDef>
@@ -207,6 +210,7 @@
 
   <Roguelike.BlueprintGroupDef>
     <defName>Roguelike_BP_Power</defName>
+    <requiresUnlock>true</requiresUnlock>
     <label>Power</label>
     <description>Generators, solar, wind, batteries, conduits and switches.</description>
     <buildings><li>WoodFiredGenerator</li><li>SolarGenerator</li><li>WindTurbine</li><li>Battery</li><li>PowerConduit</li><li>PowerSwitch</li></buildings>
@@ -214,6 +218,7 @@
 
   <Roguelike.BlueprintGroupDef>
     <defName>Roguelike_BP_Medical</defName>
+    <requiresUnlock>true</requiresUnlock>
     <label>Medical</label>
     <description>Hospital beds and vitals monitors.</description>
     <buildings><li>HospitalBed</li><li>VitalsMonitor</li></buildings>
