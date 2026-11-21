@@ -14,7 +14,7 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
 ## Play
 
 1. Enable **Harmony**, then **Roguelike (prototype)** below it.
-2. New game → scenario **Roguelike: Crashlanded** (Tribal Hunters and Ice Nomads appear once unlocked) → storyteller → world.
+2. New game → scenario **Roguelike: Crashlanded** (Tribal Hunters and Ice Nomads appear once unlocked). With the mod enabled only roguelike starts are listed; disable the mod to play standard RimWorld. → storyteller → world.
 3. On the landing screen the act is on the world map: 15 nodes in rows joined by lines, ending in a red **Boss**. Select a bottom-row node (its briefing shows in the inspect pane) and press Next.
 4. Each node has an objective; the alert on the right shows progress and the weather. Node kinds:
    - **Expedition:** stockpile a quota, build a target, or hold out for some days.
@@ -24,7 +24,7 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
    - **Event:** a choice on arrival, no map.
 5. The weather modifier (cold, heat, toxic buildup or a psychic drone) holds off for a grace period, then worsens every day with no cap: slower while you're ahead of pace, faster while behind.
 6. Clearing a node opens the reward screen: pick 1 card (relic, gear, implant, blueprint or recruit) or skip. Recruit nodes offer only recruits. Un-drafted blueprint groups are hidden from the build menu.
-7. Then a letter: **Leave node now** opens the instant caravan screen. On the world map, select the caravan and right-click a node at the end of a gold line. Choosing a node skips its siblings.
+7. Then a letter: **Leave node now** opens the instant caravan screen. On the world map, select the caravan and right-click a node at the end of a gold line → **Go to**: the caravan goes straight in, no travel. Choosing a node skips its siblings.
 8. The run ends on beating the boss, a squad wipe, a failed escort, or leaving a node early. The end-of-run screen shows stats and points.
 
 **Meta points:** +1 per node cleared, +5 for the boss, +1 per skipped reward. Spend them from the end-of-run screen or in **Options → Mod settings → Roguelike** on starters, extra relics/blueprints/gear in the pools, and permanent bonuses. Progress is stored in the mod settings file, not in saves.
@@ -58,6 +58,5 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 
 - The reform-caravan screen doesn't block going over mass capacity; an overweight caravan just can't move.
 - Quotas aren't checked against what the map can supply.
-- Caravans can still wander or settle off the act graph; only entering nodes is restricted.
 - Node markers reuse vanilla world icons; card art is vanilla item icons.
 - One act only; Ascension, more node types and the custom disasters are stage 5.

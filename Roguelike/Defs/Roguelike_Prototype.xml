@@ -177,8 +177,9 @@
     <offsetPerDay>-4</offsetPerDay>
     <tileTemperature>-100~18</tileTemperature>
     <buildTarget>
-      <Wall>30</Wall>
-      <Door>2</Door>
+      <Wall>100</Wall>
+      <Door>4</Door>
+      <Bed>3</Bed>
     </buildTarget>
   </Roguelike.NodePresetDef>
 
@@ -191,8 +192,9 @@
     <offsetPerDay>4</offsetPerDay>
     <tileTemperature>12~100</tileTemperature>
     <buildTarget>
-      <Wall>30</Wall>
-      <Door>2</Door>
+      <Wall>100</Wall>
+      <Door>4</Door>
+      <Bed>3</Bed>
     </buildTarget>
   </Roguelike.NodePresetDef>
 

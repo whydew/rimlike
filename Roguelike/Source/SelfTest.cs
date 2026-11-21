@@ -292,6 +292,7 @@ namespace Roguelike
                 {
                     var lockedMarker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == locked.id);
                     SelfTest.Check(!CaravanArrivalAction_EnterRunNode.CanEnter(lockedMarker).Accepted, $"locked node {locked.id} refuses entry");
+                    if (caravan != null) SelfTest.Check(lockedMarker.GetFloatMenuOptions(caravan).All(o => !o.Label.StartsWith("Go to") || o.action == null), $"locked node {locked.id}: Go to option is disabled");
                 }
 
                 if (node.preset.HasMap)
@@ -313,9 +314,10 @@ namespace Roguelike
                 var siblings = node.next.Where(id => id != nextNode.id).ToList();
                 var marker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == nextNode.id);
                 SelfTest.Check(CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted, $"next node {nextNode.id} ({nextNode.preset.kind}) accepts entry");
-                caravan.Tile = nextNode.tile;
-                caravan.pather.StopDead();
-                new CaravanArrivalAction_EnterRunNode(marker).Arrived(caravan);
+                // Travel the way a player does: the "Go to" option on the node, which teleports the caravan in.
+                var goTo = marker.GetFloatMenuOptions(caravan).FirstOrDefault(o => o.Label.StartsWith("Go to") && o.action != null);
+                if (!SelfTest.Check(goTo != null, $"next node {nextNode.id}: offers a Go to option")) yield break;
+                goTo.action();
 
                 if (nextNode.preset.HasMap)
                 {
@@ -445,17 +447,24 @@ namespace Roguelike
             comp = NodeComp(map);
             var origin = map.mapPawns.FreeColonistsSpawned.First().Position;
             int placed = 0;
-            foreach (var cell in GenRadial.RadialCellsAround(origin, 12f, false).Where(c => c.InBounds(map) && c.Standable(map) && c.GetFirstPawn(map) == null))
+            var cells = GenRadial.RadialCellsAround(origin, 30f, false).ToList();
+            foreach (var q in comp.preset.buildTarget)
             {
-                var def = placed < 30 ? ThingDefOf.Wall : placed < 32 ? ThingDefOf.Door : null;
-                if (def == null) break;
-                var b = ThingMaker.MakeThing(def, ThingDefOf.WoodLog);
-                b.SetFaction(Faction.OfPlayer);
-                GenSpawn.Spawn(b, cell, map);
-                placed++;
+                int done = 0;
+                foreach (var cell in cells)
+                {
+                    if (done >= q.count) break;
+                    var rect = GenAdj.OccupiedRect(cell, Rot4.North, q.thingDef.size);
+                    if (!rect.All(c => c.InBounds(map) && c.Standable(map) && c.GetFirstPawn(map) == null && c.GetEdifice(map) == null)) continue;
+                    var b = ThingMaker.MakeThing(q.thingDef, ThingDefOf.WoodLog);
+                    b.SetFaction(Faction.OfPlayer);
+                    GenSpawn.Spawn(b, cell, map, Rot4.North);
+                    done++;
+                    placed++;
+                }
             }
             yield return Ticks(300);
-            SelfTest.Check(comp.completed, $"build target: {placed} walls and doors complete the node ({comp.ProgressText})");
+            SelfTest.Check(comp.completed, $"build target: {placed} buildings complete the node ({comp.ProgressText})");
 
             // Events: every option outcome against a caravan.
             var caravan = LeaveMap(map);
@@ -596,7 +605,7 @@ namespace Roguelike
             var medKit = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_MedKit");
             SelfTest.Check(!RewardUtility.RelicPool(run).Contains(medKit), "locked relic is not in the relic pool");
             SelfTest.Check(!RewardUtility.BlueprintPool(run).Contains(DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Power")), "locked blueprint group is not in the draft pool");
-            SelfTest.Check(ScenarioListed("Roguelike_RunScenario") && !ScenarioListed("Roguelike_TribalHunters") && !ScenarioListed("Roguelike_IceNomads"),
+            SelfTest.Check(ScenarioListed("Roguelike_RunScenario") && !ScenarioListed("Roguelike_TribalHunters") && !ScenarioListed("Roguelike_IceNomads") && !ScenarioListed("Crashlanded"),
                 "only the Crashlanded starter is listed before unlocking");
 
             // Earning points.

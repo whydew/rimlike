@@ -122,13 +122,18 @@ namespace Roguelike
         }
     }
 
-    /// <summary>Locked starter scenarios don't appear in the scenario list until bought.</summary>
+    /// <summary>Only roguelike starters appear in the scenario list, and locked ones only once bought.</summary>
     [HarmonyPatch(typeof(ScenarioLister), nameof(ScenarioLister.ScenariosInCategory))]
     public static class Patch_ScenarioLister_HideLocked
     {
         public static void Postfix(ref IEnumerable<Scenario> __result)
         {
-            __result = __result.Where(s => s.AllParts.OfType<ScenPart_RoguelikeRun>().All(MetaProgress.IsStarterAvailable)).ToList();
+            // With the mod enabled, only roguelike starts are offered; disable the mod to play standard RimWorld.
+            __result = __result.Where(s =>
+            {
+                var parts = s.AllParts.OfType<ScenPart_RoguelikeRun>().ToList();
+                return parts.Count > 0 && parts.All(MetaProgress.IsStarterAvailable);
+            }).ToList();
         }
     }
 

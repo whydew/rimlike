@@ -19,7 +19,7 @@ A RimWorld mod that turns the game into a run-based squad roguelike. Structure f
 ## Run structure
 
 1. **Start:** pick a starter loadout (see [Starter loadouts](#starter-loadouts)). You get its pawns, its fixed signature relic and a small kit. On the landing screen, the first row of nodes shows on the world map; you land on the one you pick, so the first landing is the first node.
-2. **Act map:** a branching node graph ending in a boss, laid out on the RimWorld world map. Each node is a world tile, so its biome comes from the planet. Each node previews its type, objective, threat modifier and reward. Connections between nodes are drawn on the world map. The caravan can only travel to connected next nodes, and travel time costs food, which ties into the carrying rule. Runs reuse the same world and seed; each run places a fresh node graph on it.
+2. **Act map:** a branching node graph ending in a boss, laid out on the RimWorld world map. Each node is a world tile, so its biome comes from the planet. Each node previews its type, objective, threat modifier and reward. Connections between nodes are drawn on the world map. The caravan goes straight into a connected next node when the player picks it (no overland travel). Runs reuse the same world and seed; each run places a fresh node graph on it.
 3. **Play the node** (below).
 4. **Win the node:** a letter announces the objective is complete. Acknowledging it ends the node instantly.
 5. **Rewards:** pick 1 of 3 cards (blueprint, relic, gear, implant, or occasionally a recruit).

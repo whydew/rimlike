@@ -517,12 +517,23 @@ namespace Roguelike
         public override IEnumerable<FloatMenuOption> GetFloatMenuOptions(Caravan caravan)
         {
             foreach (var o in base.GetFloatMenuOptions(caravan)) yield return o;
+            var report = CaravanArrivalAction_EnterRunNode.CanEnter(this);
+            if (!report.Accepted)
+            {
+                if (!report.FailReason.NullOrEmpty()) yield return new FloatMenuOption($"Go to {Label} ({report.FailReason})", null);
+                yield break;
+            }
+            // No overland travel: the caravan goes straight into the chosen node.
             var marker = this;
-            foreach (var o in CaravanArrivalActionUtility.GetFloatMenuOptions(
-                         () => CaravanArrivalAction_EnterRunNode.CanEnter(marker),
-                         () => new CaravanArrivalAction_EnterRunNode(marker),
-                         "Travel to and enter " + Label, caravan, Tile, this))
-                yield return o;
+            yield return new FloatMenuOption("Go to " + Label, () => GoTo(caravan, marker), revalidateWorldClickTarget: this);
+        }
+
+        public static void GoTo(Caravan caravan, RunNodeMarker marker)
+        {
+            if (!CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted) return;
+            caravan.pather.StopDead();
+            caravan.Tile = marker.Tile;
+            new CaravanArrivalAction_EnterRunNode(marker).Arrived(caravan);
         }
 
         public override void ExposeData()
