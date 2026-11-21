@@ -170,7 +170,7 @@ namespace Roguelike
             ApplyRelicHediffs();
             // The current node's map disappears if everyone leaves (or abandons it) before the objective is met.
             var current = CurrentNode;
-            if (current != null && Current.Game.FindMap(current.tile) == null)
+            if (current != null && current.preset.HasMap && Current.Game.FindMap(current.tile) == null)
             {
                 Lose($"You left {current.preset.label} before completing its objective.");
             }
@@ -346,13 +346,23 @@ namespace Roguelike
             foreach (var n in nodes)
             {
                 float temp = Find.WorldGrid[n.tile].temperature;
-                var pool = all.Where(p => p.isBoss == n.IsBoss).ToList();
+                // Starting nodes are always expeditions (the landing site is a fresh camp); later rows mix node kinds.
+                var kind = n.IsBoss ? (NodeKind?)null : n.row == 0 ? NodeKind.Expedition : MiddleRowKinds.RandomElementByWeight(k => k.weight).kind;
+                var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind)).ToList();
+                if (pool.Count == 0) pool = all.Where(p => !p.isBoss && p.kind == NodeKind.Expedition).ToList();
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
-                n.preset = (fitting.Count > 0 ? fitting : pool.Count > 0 ? pool : all).RandomElement();
-                // About a quarter of the middle nodes offer recruits instead of a mixed card draw.
-                n.reward = n.IsBoss ? RunRewardKind.None : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
+                var options = fitting.Count > 0 ? fitting : pool;
+                n.preset = options.RandomElementByWeight(p => p.weight);
+                // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
+                n.reward = n.IsBoss || n.preset.kind == NodeKind.Event ? RunRewardKind.None
+                    : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
             }
         }
+
+        private static readonly (NodeKind kind, float weight)[] MiddleRowKinds =
+        {
+            (NodeKind.Expedition, 40f), (NodeKind.CombatAlerted, 20f), (NodeKind.CombatUnaware, 15f), (NodeKind.Escort, 10f), (NodeKind.Event, 15f),
+        };
 
         // ---------- Drawing ----------
 
@@ -553,6 +563,13 @@ namespace Roguelike
             if (!run.CanEnter(node))
             {
                 Messages.Message("That node can't be entered any more.", caravan, MessageTypeDefOf.RejectInput, false);
+                return;
+            }
+            if (!node.preset.HasMap)
+            {
+                // Event nodes resolve right on the world map.
+                run.Choose(node);
+                EventUtility.Open(node, caravan);
                 return;
             }
             var size = new IntVec3(node.preset.mapSize, 1, node.preset.mapSize);

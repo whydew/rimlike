@@ -198,7 +198,12 @@ namespace Roguelike
             }
             if (caravan != null)
             {
-                if (thing is Pawn pawn) caravan.AddPawn(pawn, true);
+                if (thing is Pawn pawn)
+                {
+                    // Caravan members must be world pawns.
+                    if (!pawn.IsWorldPawn()) Find.WorldPawns.PassToWorld(pawn);
+                    caravan.AddPawn(pawn, true);
+                }
                 else CaravanInventoryUtility.GiveThing(caravan, thing);
             }
         }

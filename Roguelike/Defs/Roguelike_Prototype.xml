@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Threat modifiers: a temperature offset the node drives over time. -->
+  <!-- ===================== Weather modifiers =====================
+    Each node rolls one; the node drives its intensity up over time with no cap.
+  -->
   <GameConditionDef>
     <defName>Roguelike_EscalatingCold</defName>
     <conditionClass>Roguelike.GameCondition_EscalatingTemperature</conditionClass>
@@ -17,6 +19,34 @@
     <description>An unnatural heat has settled over this region. Once it starts, it gets worse every day until you leave.</description>
     <allowUnderground>false</allowUnderground>
   </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingToxic</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingToxic</conditionClass>
+    <label>creeping toxins</label>
+    <description>Toxic particles drift down and build up in anyone outdoors. Once it is strong enough it seeps indoors too.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingPsychic</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingPsychic</conditionClass>
+    <label>rising psychic drone</label>
+    <description>A psychic drone that grows stronger every day, souring everyone's mood until minds start to break.</description>
+  </GameConditionDef>
+
+  <ThoughtDef>
+    <defName>Roguelike_PsychicDrone</defName>
+    <workerClass>Roguelike.ThoughtWorker_RoguelikePsychic</workerClass>
+    <effectMultiplyingStat>PsychicSensitivity</effectMultiplyingStat>
+    <validWhileDespawned>false</validWhileDespawned>
+    <stages>
+      <li><label>psychic drone (low)</label><description>A low psychic drone is pressing on my mind.</description><baseMoodEffect>-8</baseMoodEffect></li>
+      <li><label>psychic drone (medium)</label><description>A psychic drone is grinding on my mind.</description><baseMoodEffect>-16</baseMoodEffect></li>
+      <li><label>psychic drone (high)</label><description>A strong psychic drone is crushing my thoughts.</description><baseMoodEffect>-28</baseMoodEffect></li>
+      <li><label>psychic drone (extreme)</label><description>An extreme psychic drone is tearing my mind apart.</description><baseMoodEffect>-45</baseMoodEffect></li>
+    </stages>
+  </ThoughtDef>
 
   <!-- World object that owns a node map. The map is removed once no colonists remain. -->
   <WorldObjectDef ParentName="StaticWorldObjectBase">
@@ -74,16 +104,19 @@
     </scenario>
   </ScenarioDef>
 
-  <!--
-    Tunable presets. Edit these to tune by feel; no recompile needed.
-    graceDays:      days before the weather starts changing.
-    offsetPerDay:   base change per day once it starts (°C; shown in the player's unit).
-    targetDays:     days the objective "should" take; sets the expected pace.
-    paceSensitivity, minPaceFactor, maxPaceFactor: how much being ahead/behind pace
-                    slows or speeds the change (factor = 1 + behindFraction * sensitivity).
-    tileTemperature: world-tile average temperatures (°C) the preset fits, so modifiers match the biome.
-    isBoss:          only used for the act's final node.
+  <!-- ===================== Node presets =====================
+    Tune by feel; no recompile needed.
+    kind:            Expedition, CombatAlerted, CombatUnaware, Escort, Event. Row 0 is always Expedition.
+    objective:       Stockpile (quota), Build (buildTarget), Survive (surviveDays), KillAll, Escort (surviveDays).
+    condition:       weather modifier (omit for none). offsetPerDay is its rate: °C for temperature,
+                     toxic buildup per day for toxic, drone levels per day for psychic.
+    graceDays, targetDays, paceSensitivity, minPaceFactor, maxPaceFactor: the pace-driven clock.
+    tileTemperature: world-tile average temperatures (°C) the preset fits.
+    threatScale, patrolIntervalDays, reinforcementDays: enemy pressure.
+    weight:          relative chance among presets of the same kind.
   -->
+
+  <!-- Expeditions -->
   <Roguelike.NodePresetDef>
     <defName>Roguelike_ColdTest</defName>
     <label>cold expedition</label>
@@ -110,37 +143,171 @@
     </quota>
   </Roguelike.NodePresetDef>
 
-  <!-- Placeholder bosses until stage 3: a bigger quota and a harsher clock. -->
   <Roguelike.NodePresetDef>
-    <defName>Roguelike_BossCold</defName>
-    <label>frozen stronghold</label>
-    <description>Build up a large stockpile while a brutal cold closes in.</description>
-    <condition>Roguelike_EscalatingCold</condition>
-    <isBoss>true</isBoss>
-    <graceDays>1</graceDays>
-    <offsetPerDay>-6</offsetPerDay>
-    <targetDays>10</targetDays>
-    <tileTemperature>-100~18</tileTemperature>
+    <defName>Roguelike_ToxicGrove</defName>
+    <label>poisoned grove</label>
+    <description>Gather timber and steel while toxins drift down on the camp.</description>
+    <condition>Roguelike_EscalatingToxic</condition>
+    <offsetPerDay>0.06</offsetPerDay>
     <quota>
-      <WoodLog>800</WoodLog>
-      <Steel>300</Steel>
+      <WoodLog>300</WoodLog>
+      <Steel>100</Steel>
     </quota>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef>
-    <defName>Roguelike_BossHeat</defName>
-    <label>scorched stronghold</label>
-    <description>Build up a large stockpile while a brutal heat closes in.</description>
+    <defName>Roguelike_PsychicHoldout</defName>
+    <label>whispering hills</label>
+    <description>Hold out while a psychic drone builds over the hills.</description>
+    <objective>Survive</objective>
+    <surviveDays>5</surviveDays>
+    <condition>Roguelike_EscalatingPsychic</condition>
+    <offsetPerDay>0.6</offsetPerDay>
+    <targetDays>5</targetDays>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_FrostFort</defName>
+    <label>frost fort</label>
+    <description>Wall in a shelter before the cold closes in.</description>
+    <objective>Build</objective>
+    <condition>Roguelike_EscalatingCold</condition>
+    <offsetPerDay>-4</offsetPerDay>
+    <tileTemperature>-100~18</tileTemperature>
+    <buildTarget>
+      <Wall>30</Wall>
+      <Door>2</Door>
+    </buildTarget>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_SunFort</defName>
+    <label>sun-scorched fort</label>
+    <description>Wall in a shelter before the heat closes in.</description>
+    <objective>Build</objective>
     <condition>Roguelike_EscalatingHeat</condition>
+    <offsetPerDay>4</offsetPerDay>
+    <tileTemperature>12~100</tileTemperature>
+    <buildTarget>
+      <Wall>30</Wall>
+      <Door>2</Door>
+    </buildTarget>
+  </Roguelike.NodePresetDef>
+
+  <!-- Combat -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_Ambush</defName>
+    <label>ambush</label>
+    <description>Raiders were waiting for you.</description>
+    <kind>CombatAlerted</kind>
+    <objective>KillAll</objective>
+    <targetDays>2</targetDays>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_RaiderCamp</defName>
+    <label>raider camp</label>
+    <description>A raider camp lies across the valley. They haven't seen you yet.</description>
+    <kind>CombatUnaware</kind>
+    <objective>KillAll</objective>
+    <condition>Roguelike_EscalatingToxic</condition>
+    <offsetPerDay>0.05</offsetPerDay>
+    <targetDays>5</targetDays>
+    <patrolIntervalDays>2</patrolIntervalDays>
+    <reinforcementDays>5</reinforcementDays>
+  </Roguelike.NodePresetDef>
+
+  <!-- Escort -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_RefugeeEscort</defName>
+    <label>refugee escort</label>
+    <description>A refugee begs for protection until their people arrive.</description>
+    <kind>Escort</kind>
+    <objective>Escort</objective>
+    <surviveDays>4</surviveDays>
+    <targetDays>4</targetDays>
+    <threatScale>0.8</threatScale>
+    <patrolIntervalDays>1.5</patrolIntervalDays>
+  </Roguelike.NodePresetDef>
+
+  <!-- Event -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_Encounter</defName>
+    <label>strange encounter</label>
+    <description>Something waits on the road ahead.</description>
+    <kind>Event</kind>
+  </Roguelike.NodePresetDef>
+
+  <!-- Bosses: a large raid under brutal weather. -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_BossCold</defName>
+    <label>frozen warlord</label>
+    <description>The warlord who rules this frozen pass has come for you, and the cold is on his side.</description>
+    <kind>CombatAlerted</kind>
+    <objective>KillAll</objective>
     <isBoss>true</isBoss>
+    <condition>Roguelike_EscalatingCold</condition>
+    <graceDays>1</graceDays>
+    <offsetPerDay>-6</offsetPerDay>
+    <targetDays>3</targetDays>
+    <threatScale>3</threatScale>
+    <tileTemperature>-100~18</tileTemperature>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_BossHeat</defName>
+    <label>scorched warlord</label>
+    <description>The warlord who rules this scorched waste has come for you, and the heat is on his side.</description>
+    <kind>CombatAlerted</kind>
+    <objective>KillAll</objective>
+    <isBoss>true</isBoss>
+    <condition>Roguelike_EscalatingHeat</condition>
     <graceDays>1</graceDays>
     <offsetPerDay>6</offsetPerDay>
-    <targetDays>10</targetDays>
+    <targetDays>3</targetDays>
+    <threatScale>3</threatScale>
     <tileTemperature>12~100</tileTemperature>
-    <quota>
-      <WoodLog>800</WoodLog>
-      <Steel>300</Steel>
-    </quota>
   </Roguelike.NodePresetDef>
+
+  <!-- ===================== Events ===================== -->
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_CargoPod</defName>
+    <label>crashed cargo pod</label>
+    <text>A cargo pod lies half-buried by the road, its hull still warm.</text>
+    <options>
+      <li><label>Pry it open</label><result>Inside, packed in foam, you find something useful.</result><outcomes><li><kind>RandomGear</kind></li></outcomes></li>
+      <li><label>Leave it</label><result>You move on. Whatever was inside stays there.</result></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_Refugee</defName>
+    <label>wounded traveler</label>
+    <text>A lone traveler, bleeding and exhausted, asks to join you.</text>
+    <options>
+      <li><label>Take them in</label><result>The traveler gratefully joins your squad.</result><outcomes><li><kind>Recruit</kind></li></outcomes></li>
+      <li><label>Send them on their way</label><result>The traveler limps off down the road.</result></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_Shrine</defName>
+    <label>ancient shrine</label>
+    <text>An ancient shrine hums with a faint power. Something rests on the altar, guarded by rusted blades.</text>
+    <options>
+      <li><label>Take the relic</label><result>The blades snap shut as you reach in, but the relic is yours.</result><outcomes><li><kind>RandomRelic</kind></li><li><kind>InjureRandom</kind><amount>12</amount></li></outcomes></li>
+      <li><label>Leave it be</label><result>You leave the shrine undisturbed.</result></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_HotSpring</defName>
+    <label>hot spring</label>
+    <text>Steam rises from a hidden hot spring. It would be a good place to rest.</text>
+    <options>
+      <li><label>Rest a while</label><result>The warm water soothes every ache.</result><outcomes><li><kind>HealAll</kind></li></outcomes></li>
+      <li><label>Search the rocks instead</label><result>Among the rocks you find an old medical cache.</result><outcomes><li><kind>RandomImplant</kind></li></outcomes></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
 
 </Defs>

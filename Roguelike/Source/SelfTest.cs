@@ -5,6 +5,7 @@ using HarmonyLib;
 using RimWorld;
 using RimWorld.Planet;
 using Verse;
+using Verse.AI.Group;
 
 namespace Roguelike
 {
@@ -122,6 +123,7 @@ namespace Roguelike
             "leave" => LeaveEarly(),
             "wipe" => Wipe(),
             "rewards" => Rewards(),
+            "variety" => Variety(),
             _ => Unknown(mode),
         };
 
@@ -220,9 +222,16 @@ namespace Roguelike
         {
             var comp = NodeComp(map);
             SelfTest.Check(comp is { Active: true } && comp.preset == node.preset, $"node {node.id}: map has the node objective ({node.preset.defName})");
-            SelfTest.Check(comp?.Condition != null, $"node {node.id}: weather condition registered");
-            SelfTest.Check(comp != null && comp.InGrace && comp.Condition != null && comp.Condition.offset == 0f, $"node {node.id}: weather holds off during grace");
+            if (node.preset.condition != null)
+            {
+                SelfTest.Check(comp?.Condition != null, $"node {node.id}: weather condition registered");
+                SelfTest.Check(comp != null && comp.InGrace && comp.Condition != null && comp.Condition.intensity == 0f, $"node {node.id}: weather holds off during grace");
+            }
+            if (node.preset.objective == ObjectiveKind.KillAll)
+                SelfTest.Check(comp != null && comp.EnemiesLeft > 0, $"node {node.id}: enemies are on the map ({comp?.EnemiesLeft})");
         }
+
+        private static Dialog_NodeTree EventWindow => Find.WindowStack.WindowOfType<Dialog_NodeTree>();
 
         // ---------- scripts ----------
 
@@ -242,22 +251,24 @@ namespace Roguelike
             var comp = NodeComp(map);
             comp.startTick -= (int)((comp.preset.graceDays + 0.5f) * GenDate.TicksPerDay);
             comp.AdvanceThreat(1f);
-            float off = comp.Condition.offset;
-            SelfTest.Check(off != 0f && Math.Sign(off) == Math.Sign(comp.preset.offsetPerDay), $"after grace the weather moves the right way ({off:0.0}°C, pace x{comp.PaceFactor:0.00})");
+            float off = comp.Condition.intensity;
+            SelfTest.Check(off != 0f && Math.Sign(off) == Math.Sign(comp.preset.offsetPerDay), $"after grace the weather moves the right way ({comp.Condition.IntensityText(off)}, pace x{comp.PaceFactor:0.00})");
 
             foreach (var w in Screenshot("s1_act_start", world: true)) yield return w;
 
             var node = start;
+            Caravan caravan = null;
             for (int step = 0; step < 10; step++)
             {
-                NodeComp(map).Complete();
+                if (node.preset.HasMap) NodeComp(map).Complete();
                 SelfTest.Check(node.state == RunNodeState.Completed, $"node {node.id}: completed");
                 if (node.IsBoss)
                 {
                     SelfTest.Check(run.runWon && !run.runLost, "boss cleared: run won");
                     break;
                 }
-                foreach (var w in PickFirstReward(node)) yield return w;
+                if (node.reward != RunRewardKind.None)
+                    foreach (var w in PickFirstReward(node)) yield return w;
                 SelfTest.Check(node.next.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {node.next.Count} next nodes are available");
 
                 var locked = run.nodes.FirstOrDefault(n => n.state == RunNodeState.Locked);
@@ -267,26 +278,54 @@ namespace Roguelike
                     SelfTest.Check(!CaravanArrivalAction_EnterRunNode.CanEnter(lockedMarker).Accepted, $"locked node {locked.id} refuses entry");
                 }
 
-                var caravan = LeaveMap(map);
-                yield return Ticks(600);
-                SelfTest.Check(!run.RunOver, $"node {node.id}: leaving after completion does not end the run");
-                SelfTest.Check(Current.Game.FindMap(node.tile) == null, $"node {node.id}: map removed after leaving");
+                if (node.preset.HasMap)
+                {
+                    caravan = LeaveMap(map);
+                    yield return Ticks(600);
+                    SelfTest.Check(Current.Game.FindMap(node.tile) == null, $"node {node.id}: map removed after leaving");
+                }
+                else yield return Ticks(600);
+                SelfTest.Check(!run.RunOver, $"node {node.id}: moving on after completion does not end the run");
 
                 var nextNode = run.NodeById(node.next.Last());
+                if (step == 1 && nextNode.preset.HasMap && !nextNode.IsBoss)
+                {
+                    // Make sure the path crosses an event node so the arrival dialog is exercised in a real run.
+                    nextNode.preset = Preset("Roguelike_Encounter");
+                    nextNode.reward = RunRewardKind.None;
+                }
                 var siblings = node.next.Where(id => id != nextNode.id).ToList();
                 var marker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == nextNode.id);
-                SelfTest.Check(CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted, $"next node {nextNode.id} accepts entry");
+                SelfTest.Check(CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted, $"next node {nextNode.id} ({nextNode.preset.kind}) accepts entry");
                 caravan.Tile = nextNode.tile;
                 caravan.pather.StopDead();
                 new CaravanArrivalAction_EnterRunNode(marker).Arrived(caravan);
-                yield return () => Current.Game.FindMap(nextNode.tile) != null;
-                yield return Frames(30);
 
-                map = Current.Game.FindMap(nextNode.tile);
-                SelfTest.Check(nextNode.state == RunNodeState.Current, $"entered node {nextNode.id}: now current");
+                if (nextNode.preset.HasMap)
+                {
+                    yield return () => Current.Game.FindMap(nextNode.tile) != null;
+                    yield return Frames(30);
+                    map = Current.Game.FindMap(nextNode.tile);
+                    SelfTest.Check(map.mapPawns.FreeColonistsSpawnedCount > 0, $"entered node {nextNode.id}: colonists arrived");
+                    CheckStartedNode(map, nextNode);
+                    if (nextNode.IsBoss)
+                    {
+                        Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
+                        foreach (var w in Screenshot("s3_boss", world: false)) yield return w;
+                    }
+                }
+                else
+                {
+                    yield return () => EventWindow != null;
+                    SelfTest.Check(nextNode.state == RunNodeState.Current, $"event node {nextNode.id}: dialog opened on arrival");
+                    foreach (var w in Screenshot("s3_event_on_arrival", world: true)) yield return w;
+                    EventWindow.Close(false);
+                    string result = EventUtility.Resolve(nextNode, caravan, DefDatabase<RoguelikeEventDef>.AllDefsListForReading.First(), 0);
+                    SelfTest.Check(!result.NullOrEmpty() && nextNode.state == RunNodeState.Completed, $"event node {nextNode.id}: resolved ({result.Split('\n')[0]})");
+                    map = null;
+                }
+                SelfTest.Check(nextNode.state is RunNodeState.Current or RunNodeState.Completed, $"entered node {nextNode.id}: it is the current node");
                 SelfTest.Check(siblings.All(id => run.NodeById(id).state == RunNodeState.Skipped), $"entered node {nextNode.id}: siblings skipped");
-                SelfTest.Check(map.mapPawns.FreeColonistsSpawnedCount > 0, $"entered node {nextNode.id}: colonists arrived");
-                CheckStartedNode(map, nextNode);
                 if (step == 0)
                     foreach (var w in Screenshot("s1_act_after_first_move", world: true)) yield return w;
                 node = nextNode;
@@ -294,6 +333,133 @@ namespace Roguelike
             SelfTest.Check(run.runWon, "run ends won");
             foreach (var w in Screenshot("s1_act_won", world: true)) yield return w;
         }
+
+        private static void KillAll(IEnumerable<Pawn> pawns)
+        {
+            foreach (var p in pawns.ToList()) if (!p.Dead) p.Kill(null);
+        }
+
+        private static NodePresetDef Preset(string name) => DefDatabase<NodePresetDef>.GetNamed(name);
+
+        /// <summary>Enters a debug node with <paramref name="preset"/> from the current map and waits for it.</summary>
+        private static IEnumerable<Func<bool>> EnterDebugNode(string preset)
+        {
+            var from = Find.CurrentMap;
+            NodeLauncher.Enter(from, Preset(preset));
+            yield return () => Find.CurrentMap != from && NodeComp(Find.CurrentMap) is { Active: true };
+            yield return Frames(20);
+        }
+
+        /// <summary>Every node kind, objective and modifier, using debug nodes off the run graph.</summary>
+        private static IEnumerable<Func<bool>> Variety()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+
+            // Alerted combat.
+            foreach (var w in EnterDebugNode("Roguelike_Ambush")) yield return w;
+            var map = Find.CurrentMap;
+            var comp = NodeComp(map);
+            SelfTest.Check(comp.enemyFaction != null && comp.enemyFaction.HostileTo(Faction.OfPlayer), $"ambush: hostile enemy faction ({comp.enemyFaction?.Name})");
+            SelfTest.Check(comp.EnemiesLeft > 0, $"ambush: raid is on the map ({comp.EnemiesLeft} enemies, {comp.raidsLaunched} raids, faction {comp.enemyFaction?.def.defName}, hostiles on map {map.mapPawns.AllPawnsSpawned.Count(p => p.HostileTo(Faction.OfPlayer))})");
+            Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
+            foreach (var w in Screenshot("s3_ambush", world: false)) yield return w;
+            KillAll(map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction));
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "ambush: defeating every enemy completes the node");
+
+            // Unaware combat camp with patrols, reinforcements and toxic weather.
+            foreach (var w in EnterDebugNode("Roguelike_RaiderCamp")) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            int campers = comp.EnemiesLeft;
+            SelfTest.Check(campers > 0, $"raider camp: camp spawned ({campers} enemies)");
+            var squad = map.mapPawns.FreeColonistsSpawned.ToList();
+            float nearest = map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction).Min(e => squad.Min(c => c.Position.DistanceTo(e.Position)));
+            SelfTest.Check(nearest > 40f, $"raider camp: camp is far from the squad ({nearest:0} cells)");
+            SelfTest.Check(map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction).All(e => e.GetLord()?.LordJob is Verse.AI.Group.LordJob_DefendPoint), "raider camp: enemies hold their camp until engaged");
+            int raids = comp.raidsLaunched;
+            comp.nextPatrolTick = Find.TickManager.TicksGame + 1;
+            yield return Ticks(300);
+            SelfTest.Check(comp.raidsLaunched == raids + 1 && comp.nextPatrolTick > Find.TickManager.TicksGame, $"raider camp: a patrol raid arrives and the next one is scheduled ({comp.EnemiesLeft} enemies)");
+
+            comp.reinforcementTick = Find.TickManager.TicksGame + 1;
+            yield return Ticks(300);
+            SelfTest.Check(comp.raidsLaunched == raids + 2 && comp.reinforcementTick < 0, $"raider camp: reinforcements arrive once ({comp.EnemiesLeft} enemies)");
+            SelfTest.Check(comp.Condition is GameCondition_EscalatingToxic, "raider camp: toxic weather registered");
+            comp.startTick -= (int)(comp.GraceDays * GenDate.TicksPerDay + 1000);
+            comp.Condition.intensity = 1.5f;
+            yield return Ticks(1500);
+            float tox = squad.Max(c => c.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.ToxicBuildup)?.Severity ?? 0f);
+            SelfTest.Check(tox > 0f, $"toxic modifier: colonists build up toxins ({tox:0.00})");
+            KillAll(map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction));
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "raider camp: clearing the camp and raids completes the node");
+            foreach (var c in squad) HealthUtility.HealNonPermanentInjuriesAndRestoreLegs(c);
+            foreach (var c in squad) { var h = c.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.ToxicBuildup); if (h != null) c.health.RemoveHediff(h); }
+
+            // Escort: the refugee dying fails the node.
+            foreach (var w in EnterDebugNode("Roguelike_RefugeeEscort")) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            SelfTest.Check(comp.EscortAlive && !comp.escort.HostileTo(Faction.OfPlayer), "escort: a friendly refugee is on the map");
+            comp.escort.Kill(null);
+            yield return Ticks(300);
+            SelfTest.Check(comp.failed && !comp.completed, "escort: the refugee dying fails the node");
+            SelfTest.Check(!run.RunOver, "escort: a failed debug node off the run graph does not end the run");
+
+            // Survive under a psychic drone.
+            foreach (var w in EnterDebugNode("Roguelike_PsychicHoldout")) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            var colonist = map.mapPawns.FreeColonistsSpawned.First();
+            comp.Condition.intensity = 2.5f;
+            var drone = DefDatabase<ThoughtDef>.GetNamed("Roguelike_PsychicDrone");
+            var state = drone.Worker.CurrentState(colonist);
+            SelfTest.Check(state.Active && state.StageIndex == 1, $"psychic modifier: medium drone mood penalty at level 2.5 (stage {state.StageIndex})");
+            comp.startTick -= (int)(comp.preset.surviveDays * GenDate.TicksPerDay);
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "hold-out: surviving the days completes the node");
+
+            // Build target.
+            foreach (var w in EnterDebugNode("Roguelike_FrostFort")) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            var origin = map.mapPawns.FreeColonistsSpawned.First().Position;
+            int placed = 0;
+            foreach (var cell in GenRadial.RadialCellsAround(origin, 12f, false).Where(c => c.InBounds(map) && c.Standable(map) && c.GetFirstPawn(map) == null))
+            {
+                var def = placed < 30 ? ThingDefOf.Wall : placed < 32 ? ThingDefOf.Door : null;
+                if (def == null) break;
+                var b = ThingMaker.MakeThing(def, ThingDefOf.WoodLog);
+                b.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(b, cell, map);
+                placed++;
+            }
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, $"build target: {placed} walls and doors complete the node ({comp.ProgressText})");
+
+            // Events: every option outcome against a caravan.
+            var caravan = LeaveMap(map);
+            yield return Ticks(300);
+            var fake = new RunNode { id = -1, tile = caravan.Tile, preset = Preset("Roguelike_Encounter") };
+            int relics = run.relics.Count;
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_Shrine"), 0);
+            SelfTest.Check(run.relics.Count == relics + 1, "event: the shrine grants a relic");
+            int members = caravan.PawnsListForReading.Count;
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_Refugee"), 0);
+            SelfTest.Check(caravan.PawnsListForReading.Count == members + 1, "event: the traveler joins the caravan");
+            int items = CaravanInventoryUtility.AllInventoryItems(caravan).Count;
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_CargoPod"), 0);
+            SelfTest.Check(CaravanInventoryUtility.AllInventoryItems(caravan).Count > items, "event: the cargo pod's gear goes into the caravan");
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_HotSpring"), 0);
+            SelfTest.Check(caravan.PawnsListForReading.Where(p => p.RaceProps.Humanlike).All(p => !p.health.hediffSet.hediffs.OfType<Hediff_Injury>().Any(i => !i.IsPermanent())), "event: the hot spring heals injuries");
+            EventUtility.Open(fake, caravan);
+            yield return () => EventWindow != null;
+            foreach (var w in Screenshot("s3_event", world: true)) yield return w;
+            EventWindow.Close(false);
+        }
+
 
         private static Dialog_RewardPick RewardWindow => Find.WindowStack.WindowOfType<Dialog_RewardPick>();
 
