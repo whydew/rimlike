@@ -31,12 +31,12 @@
     <isTempIncidentMapOwner>true</isTempIncidentMapOwner>
   </WorldObjectDef>
 
-  <!-- Starting-node choice shown on the world map during landing-site selection. -->
+  <!-- Act-graph node marker. Bottom-row nodes are the landing choices. -->
   <WorldObjectDef ParentName="StaticWorldObjectBase">
-    <defName>Roguelike_StartNode</defName>
-    <label>starting node</label>
-    <description>A place to begin the run. Select it and press Next to land here.</description>
-    <worldObjectClass>Roguelike.StartNodeMarker</worldObjectClass>
+    <defName>Roguelike_RunNode</defName>
+    <label>run node</label>
+    <description>A node of the current act. Land on a bottom-row node to start, then travel along the lines to reach the boss.</description>
+    <worldObjectClass>Roguelike.RunNodeMarker</worldObjectClass>
     <texture>World/WorldObjects/JourneyDestination</texture>
     <expandingIcon>true</expandingIcon>
     <expandingIconTexture>World/WorldObjects/Expanding/JourneyDestination</expandingIconTexture>
@@ -81,6 +81,8 @@
     targetDays:     days the objective "should" take; sets the expected pace.
     paceSensitivity, minPaceFactor, maxPaceFactor: how much being ahead/behind pace
                     slows or speeds the change (factor = 1 + behindFraction * sensitivity).
+    tileTemperature: world-tile average temperatures (°C) the preset fits, so modifiers match the biome.
+    isBoss:          only used for the act's final node.
   -->
   <Roguelike.NodePresetDef>
     <defName>Roguelike_ColdTest</defName>
@@ -88,6 +90,7 @@
     <description>Stockpile the quota before the cold makes the outdoors unlivable.</description>
     <condition>Roguelike_EscalatingCold</condition>
     <offsetPerDay>-4</offsetPerDay>
+    <tileTemperature>-100~18</tileTemperature>
     <quota>
       <WoodLog>400</WoodLog>
       <Steel>150</Steel>
@@ -100,9 +103,43 @@
     <description>Stockpile the quota before the heat makes the outdoors unlivable.</description>
     <condition>Roguelike_EscalatingHeat</condition>
     <offsetPerDay>4</offsetPerDay>
+    <tileTemperature>12~100</tileTemperature>
     <quota>
       <WoodLog>400</WoodLog>
       <Steel>150</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+  <!-- Placeholder bosses until stage 3: a bigger quota and a harsher clock. -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_BossCold</defName>
+    <label>frozen stronghold</label>
+    <description>Build up a large stockpile while a brutal cold closes in.</description>
+    <condition>Roguelike_EscalatingCold</condition>
+    <isBoss>true</isBoss>
+    <graceDays>1</graceDays>
+    <offsetPerDay>-6</offsetPerDay>
+    <targetDays>10</targetDays>
+    <tileTemperature>-100~18</tileTemperature>
+    <quota>
+      <WoodLog>800</WoodLog>
+      <Steel>300</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_BossHeat</defName>
+    <label>scorched stronghold</label>
+    <description>Build up a large stockpile while a brutal heat closes in.</description>
+    <condition>Roguelike_EscalatingHeat</condition>
+    <isBoss>true</isBoss>
+    <graceDays>1</graceDays>
+    <offsetPerDay>6</offsetPerDay>
+    <targetDays>10</targetDays>
+    <tileTemperature>12~100</tileTemperature>
+    <quota>
+      <WoodLog>800</WoodLog>
+      <Steel>300</Steel>
     </quota>
   </Roguelike.NodePresetDef>
 

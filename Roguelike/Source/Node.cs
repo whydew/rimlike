@@ -12,7 +12,7 @@ namespace Roguelike
     public static class RoguelikeDefOf
     {
         public static WorldObjectDef Roguelike_Node;
-        public static WorldObjectDef Roguelike_StartNode;
+        public static WorldObjectDef Roguelike_RunNode;
         public static LetterDef Roguelike_NodeComplete;
 
         static RoguelikeDefOf() => DefOfHelper.EnsureInitializedInCtor(typeof(RoguelikeDefOf));
@@ -29,13 +29,16 @@ namespace Roguelike
         public float minPaceFactor = 0.25f;
         public float maxPaceFactor = 2.5f;
         public int mapSize = 150;
+        public bool isBoss;
+        /// <summary>Tile average temperatures (°C) this preset fits, so modifiers match the biome.</summary>
+        public FloatRange tileTemperature = new FloatRange(-999f, 999f);
         public List<ThingDefCountClass> quota = new List<ThingDefCountClass>();
 
         public string QuotaText => string.Join(", ", quota.Select(q => $"{q.count} {q.thingDef.label}"));
 
         public string Briefing =>
             $"{description}\n\nQuota: {QuotaText}.\n\n{condition.LabelCap}: holds off for {graceDays:0.#} days, then changes about " +
-            $"{offsetPerDay.ToStringTemperatureOffset("F0")} per day with no limit. It changes slower while you're ahead of pace and faster while you're behind.";
+            $"{offsetPerDay.ToStringTemperatureOffset("F0")} per day with no limit. It changes slower while you're ahead of pace and faster while you're behind.\n\nLeaving before the quota is met ends the run.";
     }
 
     /// <summary>Temperature offset driven by the node component; no cap.</summary>
@@ -129,9 +132,15 @@ namespace Roguelike
         public void Complete()
         {
             completed = true;
+            var run = WorldComponent_RoguelikeRun.Get;
+            var runNode = run is { active: true } ? run.NodeAt(map.Tile) : null;
+            run?.NotifyNodeCompleted(map.Tile);
+            string nextStep = runNode == null || runNode.IsBoss
+                ? ""
+                : "\n\nThen pick your next node on the world map: select the caravan and right-click a highlighted node.";
             var letter = (Letter_NodeComplete)LetterMaker.MakeLetter(
                 "Node complete",
-                "You've met this node's objective.\n\nLeave now to form a caravan with what your pawns and pack animals can carry. Everything else stays behind.",
+                "You've met this node's objective.\n\nLeave now to form a caravan with what your pawns and pack animals can carry. Everything else stays behind." + nextStep,
                 RoguelikeDefOf.Roguelike_NodeComplete);
             letter.map = map;
             Find.LetterStack.ReceiveLetter(letter);
@@ -176,7 +185,7 @@ namespace Roguelike
         }
 
         /// <summary>The starting node is a player settlement, which never removes itself; abandon it once everyone has left.</summary>
-        private static void AbandonIfEmpty(Map m)
+        internal static void AbandonIfEmpty(Map m)
         {
             if (m == null || !Find.Maps.Contains(m) || m.mapPawns.AnyPawnBlockingMapRemoval) return;
             if (m.Parent is Settlement settlement) settlement.Abandon(false);

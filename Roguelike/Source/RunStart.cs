@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using HarmonyLib;
 using RimWorld;
 using RimWorld.Planet;
@@ -14,85 +12,42 @@ namespace Roguelike
         static RoguelikeInit() => new Harmony("matt.roguelike").PatchAll(typeof(RoguelikeInit).Assembly);
     }
 
-    /// <summary>A starting-node choice shown on the world map during landing-site selection.</summary>
-    public class StartNodeMarker : WorldObject
-    {
-        public NodePresetDef preset;
-
-        public override string Label => "Start: " + (preset?.label ?? def.label);
-
-        public override string GetInspectString()
-        {
-            var sb = new StringBuilder(base.GetInspectString());
-            if (preset != null)
-            {
-                if (sb.Length > 0) sb.AppendLine();
-                // Inspect strings must not contain blank lines.
-                sb.Append(preset.Briefing.Replace("\n\n", "\n"));
-            }
-            return sb.ToString();
-        }
-
-        public override void ExposeData()
-        {
-            base.ExposeData();
-            Scribe_Defs.Look(ref preset, "preset");
-        }
-    }
-
-    /// <summary>Scenario part for a run: places starting nodes after world generation and starts the chosen one.</summary>
+    /// <summary>Scenario part for a run: lays out the act after world generation and starts the chosen starting node.</summary>
     public class ScenPart_RoguelikeRun : ScenPart
     {
-        private const int StartNodeCount = 3;
-        private const float MinNodeSpacingTiles = 12f;
-
         public static bool ActiveInCurrentScenario => Find.Scenario?.AllParts.OfType<ScenPart_RoguelikeRun>().Any() == true;
 
-        public static IEnumerable<StartNodeMarker> Markers => Find.WorldObjects.AllWorldObjects.OfType<StartNodeMarker>();
-
-        public static StartNodeMarker MarkerAt(PlanetTile tile) => Markers.FirstOrDefault(m => m.Tile == tile);
-
-        public override string Summary(Scenario scen) => "Choose one of several starting nodes on the world map. Each node has an objective and worsening weather.";
-
-        public override void PostWorldGenerate()
+        /// <summary>The start-row node at <paramref name="tile"/>, if the player may land there.</summary>
+        public static RunNode StartNodeAt(PlanetTile tile)
         {
-            var presets = DefDatabase<NodePresetDef>.AllDefsListForReading.InRandomOrder().ToList();
-            var placed = new List<PlanetTile>();
-            for (int i = 0; i < StartNodeCount; i++)
-            {
-                if (!TryFindSpacedTile(placed, out var tile)) break;
-                var marker = (StartNodeMarker)WorldObjectMaker.MakeWorldObject(RoguelikeDefOf.Roguelike_StartNode);
-                marker.Tile = tile;
-                marker.preset = presets[i % presets.Count];
-                Find.WorldObjects.Add(marker);
-                placed.Add(tile);
-            }
+            var node = WorldComponent_RoguelikeRun.Get?.NodeAt(tile);
+            return node != null && node.row == 0 && node.state == RunNodeState.Available ? node : null;
         }
 
-        private static bool TryFindSpacedTile(List<PlanetTile> placed, out PlanetTile tile)
+        public override string Summary(Scenario scen) =>
+            "Travel a branching act of nodes on the world map, ending in a boss. Each node has an objective and worsening weather.";
+
+        public override void PostWorldGenerate() => WorldComponent_RoguelikeRun.Get?.GenerateAct();
+
+        /// <summary>Catch a squad wipe the moment the last colonist dies, before the game can hand the player a new joiner.</summary>
+        public override void Notify_PawnDied(Corpse corpse)
         {
-            for (int attempt = 0; attempt < 100; attempt++)
-            {
-                tile = TileFinder.RandomStartingTile();
-                var t = tile;
-                if (tile.Valid && placed.All(p => Find.WorldGrid.ApproxDistanceInTiles(p, t) >= MinNodeSpacingTiles)) return true;
-            }
-            tile = PlanetTile.Invalid;
-            return false;
+            var pawn = corpse?.InnerPawn;
+            if (pawn == null || pawn.Faction != Faction.OfPlayer || !pawn.RaceProps.Humanlike) return;
+            if (!PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Any())
+                WorldComponent_RoguelikeRun.Get?.Lose("Your whole squad is gone.");
         }
 
         public override void PostGameStart()
         {
             var map = Find.CurrentMap;
-            var chosen = MarkerAt(Find.GameInfo.startingTile);
-            var preset = chosen?.preset;
-            foreach (var m in Markers.ToList()) m.Destroy();
-            if (map == null || preset == null)
+            var node = WorldComponent_RoguelikeRun.Get?.BeginAt(Find.GameInfo.startingTile);
+            if (map == null || node?.preset == null)
             {
                 Log.Warning("[Roguelike] No starting node found at the landing tile; this run has no node objective.");
                 return;
             }
-            NodeLauncher.StartOn(map, preset, new LookTargets(map.Center, map));
+            NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map));
         }
     }
 
@@ -105,14 +60,14 @@ namespace Roguelike
             if (!ScenPart_RoguelikeRun.ActiveInCurrentScenario) return true;
 
             var selector = Find.WorldSelector;
-            if (!Find.WorldInterface.SelectedTile.Valid && selector.NumSelectedObjects == 1 && selector.SelectedObjects[0] is StartNodeMarker picked)
+            if (!Find.WorldInterface.SelectedTile.Valid && selector.NumSelectedObjects == 1 && selector.SelectedObjects[0] is RunNodeMarker picked)
             {
                 Find.WorldInterface.SelectedTile = picked.Tile;
             }
 
-            if (ScenPart_RoguelikeRun.MarkerAt(Find.WorldInterface.SelectedTile) == null)
+            if (ScenPart_RoguelikeRun.StartNodeAt(Find.WorldInterface.SelectedTile) == null)
             {
-                Messages.Message("Choose one of the starting nodes to begin the run.", MessageTypeDefOf.RejectInput, false);
+                Messages.Message("Choose one of the starting nodes (bottom row) to begin the run.", MessageTypeDefOf.RejectInput, false);
                 __result = false;
                 return false;
             }
@@ -120,15 +75,15 @@ namespace Roguelike
         }
     }
 
-    /// <summary>Points the camera at the first starting node when the landing page opens.</summary>
+    /// <summary>Points the camera at the starting row when the landing page opens.</summary>
     [HarmonyPatch(typeof(Page_SelectStartingSite), nameof(Page_SelectStartingSite.PostOpen))]
     public static class Patch_SelectStartingSite_PostOpen
     {
         public static void Postfix()
         {
             if (!ScenPart_RoguelikeRun.ActiveInCurrentScenario) return;
-            var first = ScenPart_RoguelikeRun.Markers.FirstOrDefault();
-            if (first != null) Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(first.Tile));
+            var start = WorldComponent_RoguelikeRun.Get?.Row(0).Skip(1).FirstOrDefault() ?? WorldComponent_RoguelikeRun.Get?.Row(0).FirstOrDefault();
+            if (start != null) Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(start.tile));
         }
     }
 }
