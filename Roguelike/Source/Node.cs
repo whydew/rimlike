@@ -58,6 +58,45 @@ namespace Roguelike
         public List<NodeRequirement> requirements = new List<NodeRequirement>();
         public float minDays;
 
+        // ---------- Eligibility: only offer objectives the squad can actually do ----------
+        /// <summary>Blueprint groups that must be drafted this run.</summary>
+        public List<BlueprintGroupDef> requiresBlueprints = new List<BlueprintGroupDef>();
+        /// <summary>Research that must already be finished.</summary>
+        public List<ResearchProjectDef> requiresResearch = new List<ResearchProjectDef>();
+        /// <summary>Some colonist must have at least this level in this skill.</summary>
+        public SkillDef requiresSkill;
+        public int requiresSkillLevel;
+        /// <summary>Crop objectives: the tile needs at least this many twelfths of growing weather (average 6–42°C).</summary>
+        public int growingTwelfths;
+
+        /// <summary>Needs drafted blueprints or finished research, so it only appears once rewards unlock it.</summary>
+        public bool Gated => requiresBlueprints.Count > 0 || requiresResearch.Count > 0;
+
+        public AcceptanceReport Eligible(WorldComponent_RoguelikeRun run, PlanetTile tile, IEnumerable<Pawn> squad)
+        {
+            var missingBp = requiresBlueprints.Where(b => run == null || !run.blueprints.Contains(b)).ToList();
+            if (missingBp.Count > 0) return $"needs blueprints: {string.Join(", ", missingBp.Select(b => b.label))}";
+            var missingRes = requiresResearch.Where(r => !r.IsFinished).ToList();
+            if (missingRes.Count > 0) return $"needs research: {string.Join(", ", missingRes.Select(r => r.label))}";
+            if (requiresSkill != null && squad != null && !squad.Any(p => p.skills?.GetSkill(requiresSkill) is { TotallyDisabled: false } s && s.Level >= requiresSkillLevel))
+                return $"needs a colonist with {requiresSkill.skillLabel} {requiresSkillLevel}";
+            if (growingTwelfths > 0 && tile.Valid && GenTemperature.TwelfthsInAverageTemperatureRange(tile, 6f, 42f).Count < growingTwelfths)
+                return "growing season too short here";
+            return true;
+        }
+
+        public string NeedsText
+        {
+            get
+            {
+                var parts = new List<string>();
+                if (requiresBlueprints.Count > 0) parts.Add("blueprints " + string.Join(", ", requiresBlueprints.Select(b => b.label)));
+                if (requiresResearch.Count > 0) parts.Add("research " + string.Join(", ", requiresResearch.Select(r => r.label)));
+                if (requiresSkill != null) parts.Add($"a colonist with {requiresSkill.skillLabel} {requiresSkillLevel}");
+                return parts.Count == 0 ? null : "Needs " + string.Join("; ", parts) + ".";
+            }
+        }
+
         /// <summary>Raid strength relative to the storyteller's current threat points.</summary>
         public float threatScale = 1f;
         /// <summary>Days between enemy patrol raids; 0 for none.</summary>
@@ -102,6 +141,7 @@ namespace Roguelike
             var sb = new StringBuilder(description);
             sb.Append($"\n\nObjective: {ObjectiveTextFor(squad)}.");
             if (objective == ObjectiveKind.Requirements && squad > 0) sb.Append($" (Counts are for a squad of {squad}.)");
+            if (NeedsText != null) sb.Append(" " + NeedsText);
             if (kind is NodeKind.CombatAlerted or NodeKind.Elite) sb.Append(" The enemy knows you're here and attacks at once.");
             if (kind == NodeKind.CombatUnaware) sb.Append(" The enemy camp hasn't spotted you yet: scout and prepare, then strike.");
             if (patrolIntervalDays > 0f) sb.Append($" Enemy patrols raid about every {patrolIntervalDays:0.#} days.");

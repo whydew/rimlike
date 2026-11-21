@@ -137,6 +137,7 @@
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_GreatGranary</defName>
+    <growingTwelfths>7</growingTwelfths>
     <label>great granary</label>
     <description>Fertile ground, a long season. Grow a granary's worth of corn and keep the squad fed and housed.</description>
     <requirements>
@@ -148,6 +149,7 @@
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_HarvestRotation</defName>
+    <growingTwelfths>7</growingTwelfths>
     <label>harvest rotation</label>
     <description>Work the fields through a full rotation of rice, potatoes and corn.</description>
     <requirements>
@@ -160,6 +162,7 @@
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_RiceCooperative</defName>
+    <growingTwelfths>5</growingTwelfths>
     <label>rice cooperative</label>
     <description>Paddies by the water. Bring in a great rice harvest and give everyone a room of their own.</description>
     <requirements>
@@ -170,8 +173,11 @@
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_MedicinalGarden</defName>
+    <growingTwelfths>7</growingTwelfths>
+    <requiresSkill>Plants</requiresSkill>
+    <requiresSkillLevel>8</requiresSkillLevel>
     <label>medicinal garden</label>
-    <description>Healroot grows wild here. Cultivate a medicine stock (needs a grower with Plants 8) and keep everyone housed.</description>
+    <description>Healroot grows wild here. Cultivate a medicine stock and keep everyone housed.</description>
     <requirements>
       <li><kind>Produce</kind><thing>MedicineHerbal</thing><count>60</count></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>

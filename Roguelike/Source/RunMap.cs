@@ -31,6 +31,8 @@ namespace Roguelike
         public NodePresetDef preset;
         /// <summary>Weather modifier rolled for this node (presets with randomModifier).</summary>
         public GameConditionDef modifier;
+        /// <summary>Its objective has been shown on a next-node card (and is now fixed).</summary>
+        public bool offered;
 
         public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, 3);
         public List<int> next = new List<int>();
@@ -57,6 +59,7 @@ namespace Roguelike
             Scribe_Values.Look(ref reward, "reward");
             Scribe_Defs.Look(ref preset, "preset");
             Scribe_Defs.Look(ref modifier, "modifier");
+            Scribe_Values.Look(ref offered, "offered");
             Scribe_Collections.Look(ref next, "next", LookMode.Value);
             next ??= new List<int>();
         }
@@ -169,6 +172,12 @@ namespace Roguelike
                 pendingPickNodeId = -1;
                 return;
             }
+            var squad = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.ToList();
+            foreach (var n in options.Where(n => !n.offered))
+            {
+                RefreshObjective(n, squad);
+                n.offered = true;
+            }
             var cards = options.Select(n => new RewardCard { kind = RewardKind.Path, pathNode = n }).ToList();
             Find.WindowStack.Add(new Dialog_RewardPick(cards, "Choose your next node", card =>
             {
@@ -176,6 +185,28 @@ namespace Roguelike
                 pendingPickNodeId = -1;
                 Depart(from, card.pathNode);
             }, allowSkip: false, title: "Where next?"));
+        }
+
+        private static List<NodePresetDef> Expeditions =>
+            DefDatabase<NodePresetDef>.AllDefsListForReading.Where(p => p.kind == NodeKind.Expedition && !p.isBoss && p.objective == ObjectiveKind.Requirements).ToList();
+
+        /// <summary>
+        /// When an expedition is first offered as a next node, make sure the squad can do it (blueprints, research, skills,
+        /// season); re-roll if not. Objectives that drafted blueprints have unlocked sometimes take its place.
+        /// </summary>
+        public void RefreshObjective(RunNode n, List<Pawn> squad)
+        {
+            if (n.preset.kind != NodeKind.Expedition || n.IsBoss) return;
+            var eligible = Expeditions.Where(p => p.Eligible(this, n.tile, squad).Accepted).ToList();
+            if (eligible.Count == 0) return;
+            var unlocked = eligible.Where(p => p.Gated).ToList();
+            bool currentOk = eligible.Contains(n.preset);
+            if (!currentOk || unlocked.Count > 0 && Rand.Chance(0.4f))
+            {
+                var pool = !currentOk || unlocked.Count == 0 ? eligible : unlocked;
+                n.preset = pool.RandomElementByWeight(p => p.weight);
+            }
+            if (n.preset.randomModifier && n.modifier == null) n.modifier = ModifierPool.PickFor(n.tile);
         }
 
         /// <summary>
@@ -533,7 +564,8 @@ namespace Roguelike
                 // Starting nodes are always expeditions (the landing site is a fresh camp); later rows mix node kinds.
                 var kind = n.IsBoss ? (NodeKind?)null : n.row == 0 ? NodeKind.Expedition
                     : (n.row == RowSizes.Length - 2 ? PreBossRowKinds : MiddleRowKinds).RandomElementByWeight(k => k.weight).kind;
-                var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind)).ToList();
+                // Gated objectives (blueprints/research) only appear later, when offered; the season must suit crop objectives.
+                var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind) && !p.Gated && (n.row > 0 || p.requiresSkill == null) && p.Eligible(this, n.tile, null).Accepted).ToList();
                 if (pool.Count == 0) pool = all.Where(p => !p.isBoss && p.kind == NodeKind.Expedition).ToList();
                 bool coastal = Find.World.CoastDirectionAt(n.tile).IsValid;
                 var placeable = pool.Where(p => !p.coastalOnly || coastal).ToList();

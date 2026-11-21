@@ -134,6 +134,7 @@ namespace Roguelike
             "newrun" => NewRunScript(),
             "disasters" => Disasters(),
             "polish" => Polish(),
+            "gating" => Gating(),
             _ => Unknown(mode),
         };
 
@@ -1043,6 +1044,78 @@ namespace Roguelike
             Find.WindowStack.Add(new Dialog_RewardPick(cards, "Self-test: rarity", null));
             foreach (var w in Screenshot("s5_rarity", world: false)) yield return w;
             Find.WindowStack.WindowOfType<Dialog_RewardPick>()?.Close(false);
+        }
+
+        /// <summary>Objectives offered only when the squad can do them: blueprints, research, skills, season; re-rolled at offer time.</summary>
+        private static IEnumerable<Func<bool>> Gating()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            var map = Find.CurrentMap;
+            var squad = map.mapPawns.FreeColonistsSpawned.ToList();
+            var start = run.CurrentNode;
+
+            SelfTest.Check(run.nodes.All(n => !n.preset.Gated), "no gated objective is assigned when the map is generated");
+            SelfTest.Check(run.Row(0).All(n => n.preset.requiresSkill == null), "starting nodes never need a skill");
+
+            var campus = Preset("Roguelike_RenewableCampus");
+            var report = campus.Eligible(run, start.tile, squad);
+            SelfTest.Check(!report.Accepted && report.Reason.Contains("blueprints"), $"gated objective is refused without its blueprints ({report.Reason})");
+            run.blueprints.Add(DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Power"));
+            run.blueprints.Add(DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Climate"));
+            report = campus.Eligible(run, start.tile, squad);
+            SelfTest.Check(!report.Accepted && report.Reason.Contains("research"), $"then refused until its research is done ({report.Reason})");
+            foreach (var r in campus.requiresResearch.Where(r => !r.IsFinished)) Find.ResearchManager.FinishProject(r, doCompletionLetter: false);
+            SelfTest.Check(campus.Eligible(run, start.tile, squad).Accepted, "and offered once blueprints and research are in place");
+
+            var garden = Preset("Roguelike_MedicinalGarden");
+            foreach (var p in squad) p.skills.GetSkill(SkillDefOf.Plants).Level = 3;
+            report = garden.Eligible(run, start.tile, squad);
+            SelfTest.Check(!report.Accepted && (report.Reason.ToLowerInvariant().Contains("plants") || report.Reason.Contains("growing")), $"medicinal garden needs a skilled grower ({report.Reason})");
+            squad[0].skills.GetSkill(SkillDefOf.Plants).Level = 10;
+            int twelfths = GenTemperature.TwelfthsInAverageTemperatureRange(start.tile, 6f, 42f).Count;
+            SelfTest.Check(garden.Eligible(run, start.tile, squad).Accepted == (twelfths >= garden.growingTwelfths),
+                $"with a skilled grower it depends only on the season ({twelfths} growing twelfths here)");
+
+            // Offer time: an objective the squad can't do is re-rolled into one it can.
+            var next = run.NodeById(start.next.First());
+            next.preset = Preset("Roguelike_UniformWorkshop");
+            next.offered = false;
+            run.blueprints.RemoveAll(b => b.defName == "Roguelike_BP_Crafting");
+            run.RefreshObjective(next, squad);
+            SelfTest.Check(next.preset.Eligible(run, next.tile, squad).Accepted && next.preset != Preset("Roguelike_UniformWorkshop"),
+                $"an objective the squad can't do is re-rolled when offered ({next.preset.defName})");
+            SelfTest.Check(next.preset.randomModifier == false || next.modifier != null, "the re-rolled objective has a weather modifier");
+
+            // A gated objective completes like any other.
+            run.CurrentNode.state = RunNodeState.Completed;
+            foreach (var w in EnterDebugNode("Roguelike_RenewableCampus", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingCold"))) yield return w;
+            map = Find.CurrentMap;
+            var comp = NodeComp(map);
+            foreach (var def in new[] { "SolarGenerator", "SolarGenerator", "WindTurbine", "Battery", "Battery", "Battery", "Heater" })
+                SelfTest.Check(SpawnBuilding(map, DefDatabase<ThingDef>.GetNamed(def)), $"renewable campus: placed a {def}");
+            BuildRoom(map, 6, 4, comp.squad, null);
+            yield return Ticks(300);
+            SelfTest.Check(comp.RequirementsMet, $"renewable campus: requirements met ({comp.ProgressText})");
+            comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "renewable campus: completes after the minimum stay");
+        }
+
+        /// <summary>Spawns a player building of <paramref name="def"/> on the first free spot near the squad.</summary>
+        private static bool SpawnBuilding(Map map, ThingDef def)
+        {
+            var near = map.mapPawns.FreeColonistsSpawned.First().Position;
+            foreach (var cell in GenRadial.RadialCellsAround(near, 40f, false))
+            {
+                var rect = GenAdj.OccupiedRect(cell, Rot4.North, def.size).ExpandedBy(1);
+                if (!rect.InBounds(map) || !rect.Cells.All(c => c.Standable(map) && c.GetFirstPawn(map) == null && c.GetEdifice(map) == null)) continue;
+                var b = ThingMaker.MakeThing(def, def.MadeFromStuff ? GenStuff.DefaultStuffFor(def) : null);
+                b.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(b, cell, map, Rot4.North, WipeMode.Vanish);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>
