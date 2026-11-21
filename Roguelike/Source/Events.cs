@@ -139,6 +139,7 @@ namespace Roguelike
             RewardKind.Blueprint => 150,
             RewardKind.Implant => 200,
             RewardKind.Recruit => 300,
+            RewardKind.Research => 180,
             _ => 120,
         };
 

@@ -704,6 +704,9 @@ namespace Roguelike
             Find.CameraDriver.JumpToCurrentMapLoc(colonist.Position);
             foreach (var w in Screenshot("s2_reward_cards", world: false)) yield return w;
             window.Pick(1);
+            float midPick = UnityEngine.Time.realtimeSinceStartup + 0.4f;
+            yield return () => UnityEngine.Time.realtimeSinceStartup >= midPick;
+            ScreenshotTaker.TakeNonSteamShot("rltest_s2_reward_pick");
             yield return () => RewardWindow == null;
             SelfTest.Check(run.pendingRewardNodeId < 0, $"picked card resolves the reward ({window.Cards[1].KindLabel}: {window.Cards[1].Title})");
             foreach (var w in DismissNextPick()) yield return w;
@@ -736,6 +739,16 @@ namespace Roguelike
 
             RewardUtility.Apply(new RewardCard { kind = RewardKind.Blueprint, blueprint = DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Climate") }, map);
             SelfTest.Check(BuildVisible("Heater") && !BuildVisible("Sandbags"), "drafted blueprint group unlocks only its buildings");
+
+            var project = RewardUtility.ResearchPool().FirstOrDefault();
+            SelfTest.Check(project != null, $"research pool has projects to offer ({RewardUtility.ResearchPool().Count()})");
+            if (project != null)
+            {
+                var researchCard = new RewardCard { kind = RewardKind.Research, research = project };
+                SelfTest.Check(!Dialog_RewardPick.BodyText(researchCard).NullOrEmpty(), $"research card has body text ({project.label})");
+                RewardUtility.Apply(researchCard, map);
+                SelfTest.Check(project.IsFinished && !RewardUtility.ResearchPool().Contains(project), $"research reward completes {project.label}");
+            }
 
             int colonists = map.mapPawns.FreeColonistsSpawnedCount;
             var recruit = RewardUtility.GenerateRecruit();

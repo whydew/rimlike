@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using RimWorld;
-using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
@@ -11,18 +10,19 @@ using Verse.Sound;
 namespace Roguelike
 {
     /// <summary>
-    /// Pick-1 card screen. Cards fan in from below, grow on hover, and on pick the chosen card
-    /// flies up while the others fade. RimWorld's UI has no animation system, so every frame's
-    /// position, scale and alpha is computed from the time since the window opened.
+    /// Full-screen pick-1 card screen. Cards are dealt from a deck below the screen with a little overshoot and spin,
+    /// float gently while you decide, and lift and glow with a light sweep under the cursor. On pick, the chosen card
+    /// flashes, flips and bursts into sparks while the rest fall away. RimWorld's UI is immediate-mode, so every
+    /// frame's transform is computed from the time since the screen opened.
     /// </summary>
     public class Dialog_RewardPick : Window
     {
-        private const float CardWidth = 230f;
-        private const float CardHeight = 380f;
-        private const float CardGap = 26f;
-        private const float EnterDuration = 0.35f;
-        private const float EnterStagger = 0.09f;
-        private const float ExitDuration = 0.4f;
+        private const float CardWidth = 236f;
+        private const float CardHeight = 392f;
+        private const float CardGap = 30f;
+        private const float DealDuration = 0.55f;
+        private const float DealStagger = 0.11f;
+        private const float ExitDuration = 0.75f;
 
         private readonly List<RewardCard> cards;
         private readonly string subtitle;
@@ -30,10 +30,13 @@ namespace Roguelike
         private readonly bool allowSkip;
         private readonly string title;
         private readonly float[] hover;
+        private readonly float[] hoverStart;
+        private readonly List<Style.Particle> particles = new List<Style.Particle>();
         private float openedAt = -1f;
         private int picked = -1;
         private bool skipped;
         private float pickedAt;
+        private bool burst;
         private bool resolved;
 
         public Dialog_RewardPick(List<RewardCard> cards, string subtitle, Action<RewardCard> onPicked, bool allowSkip = true, string title = "Choose a reward")
@@ -44,28 +47,29 @@ namespace Roguelike
             this.subtitle = subtitle;
             this.onPicked = onPicked;
             hover = new float[cards.Count];
+            hoverStart = new float[cards.Count];
             forcePause = true;
             absorbInputAroundWindow = true;
             doCloseX = false;
             closeOnClickedOutside = false;
             closeOnCancel = false;
             closeOnAccept = false;
-            doWindowBackground = true;
+            doWindowBackground = false;
+            drawShadow = false;
         }
 
         public IReadOnlyList<RewardCard> Cards => cards;
 
-        public override Vector2 InitialSize =>
-            new Vector2(Mathf.Max(600f, cards.Count * (CardWidth + CardGap) + 60f), CardHeight + 190f);
+        public override Vector2 InitialSize => new Vector2(UI.screenWidth, UI.screenHeight);
 
-        private static float Now => Time.realtimeSinceStartup;
+        protected override float Margin => 0f;
 
-        private static float EaseOut(float t) => 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f);
+        private static float Now => Style.Now;
 
         /// <summary>Picks a card as if the player clicked it (used by the self-test).</summary>
         public void Pick(int index)
         {
-            if (picked >= 0 || skipped) return;
+            if (picked >= 0 || skipped || index < 0 || index >= cards.Count) return;
             picked = index;
             pickedAt = Now;
             SoundDefOf.Click.PlayOneShotOnCamera();
@@ -82,63 +86,127 @@ namespace Roguelike
         {
             if (openedAt < 0f) openedAt = Now;
             float t = Now - openedAt;
+            bool leaving = picked >= 0 || skipped;
+            float exit = leaving ? Mathf.Clamp01((Now - pickedAt) / ExitDuration) : 0f;
 
-            Text.Font = GameFont.Medium;
-            Text.Anchor = TextAnchor.UpperCenter;
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 36f), title);
-            Text.Font = GameFont.Small;
-            GUI.color = new Color(1f, 1f, 1f, 0.7f);
-            Widgets.Label(new Rect(inRect.x, inRect.y + 36f, inRect.width, 24f), subtitle);
-            GUI.color = Color.white;
-            Text.Anchor = TextAnchor.UpperLeft;
+            // Backdrop: darken and vignette the game, fading in.
+            float bg = Style.EaseOutCubic(t / 0.35f) * (1f - Style.EaseInCubic(exit));
+            Style.Box(inRect, new Color(0.02f, 0.02f, 0.025f, 0.7f * bg));
+            Style.Tex(inRect.ExpandedBy(inRect.width * 0.12f), Style.Vignette, new Color(0f, 0f, 0f, 0.9f * bg));
 
             float totalWidth = cards.Count * CardWidth + (cards.Count - 1) * CardGap;
-            float x0 = inRect.x + (inRect.width - totalWidth) / 2f;
-            float y0 = inRect.y + 80f;
+            float x0 = inRect.center.x - totalWidth / 2f;
+            float y0 = inRect.center.y - CardHeight / 2f + 20f;
+
+            // Title drops in with a golden glow behind it, then a rule line draws out.
+            float titleIn = Style.EaseOutCubic((t - 0.05f) / 0.45f) * (1f - exit);
+            var titleRect = new Rect(inRect.x, y0 - 120f - (1f - titleIn) * 14f, inRect.width, 44f);
+            Style.GlowAround(new Rect(inRect.center.x - 240f, titleRect.y + 4f, 480f, 36f), new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.16f * titleIn), 1.6f, Style.SoftGlow);
+            var oldColor = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, titleIn);
+            Text.Font = GameFont.Medium;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Style.ShadowLabel(titleRect, title, Style.Gold);
+            Text.Font = GameFont.Small;
+            Style.ShadowLabel(new Rect(inRect.x, y0 - 78f, inRect.width, 26f), subtitle, new Color(Style.Parchment.r, Style.Parchment.g, Style.Parchment.b, 0.8f));
+            float rule = Style.EaseOutCubic((t - 0.25f) / 0.5f);
+            Style.Box(new Rect(inRect.center.x - 170f * rule, y0 - 48f, 340f * rule, 1f), new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.55f));
+            Style.Tex(new Rect(inRect.center.x - 4f, y0 - 52f, 8f, 8f), Style.Glow, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, rule));
+            GUI.color = oldColor;
+            Text.Anchor = TextAnchor.UpperLeft;
+
+            var deck = new Vector2(inRect.center.x, inRect.yMax + CardHeight * 0.6f);
+            int hovered = -1;
+            for (int i = 0; i < cards.Count; i++)
+                if (hover[i] > 0.5f) hovered = i;
 
             for (int i = 0; i < cards.Count; i++)
             {
-                var baseRect = new Rect(x0 + i * (CardWidth + CardGap), y0, CardWidth, CardHeight);
+                var slot = new Rect(x0 + i * (CardWidth + CardGap), y0, CardWidth, CardHeight);
+                float fan = i - (cards.Count - 1) / 2f;
 
-                // Fan in: slide up and fade in, one card after another.
-                float enter = EaseOut((t - i * EnterStagger) / EnterDuration);
-                float dy = (1f - enter) * 140f;
-                float alpha = enter;
-                float scale = 0.92f + 0.08f * enter;
+                // Deal in from the deck: fly up, spin into place with a little overshoot, fade in.
+                float deal = Mathf.Clamp01((t - 0.15f - i * DealStagger) / DealDuration);
+                Vector2 center = Vector2.LerpUnclamped(deck, slot.center, Style.EaseOutBack(deal));
+                float spin = (1f - Style.EaseOutCubic(deal)) * fan * 16f;
+                float alpha = Style.EaseOutCubic(deal * 1.6f);
+                float scale = Mathf.Lerp(0.7f, 1f, Style.EaseOutCubic(deal));
 
-                // Hover: grow a little.
-                bool interactive = picked < 0 && !skipped && enter >= 1f;
-                bool over = interactive && Mouse.IsOver(baseRect);
-                hover[i] = Mathf.MoveTowards(hover[i], over ? 1f : 0f, Time.unscaledDeltaTime * 8f);
-                scale *= 1f + 0.06f * hover[i];
-
-                // Exit: the picked card flies up and fades, the rest fade out.
-                if (picked >= 0 || skipped)
+                // Idle float once dealt.
+                bool dealt = deal >= 1f;
+                if (dealt)
                 {
-                    float e = EaseOut((Now - pickedAt) / ExitDuration);
-                    if (i == picked)
-                    {
-                        dy -= 180f * e;
-                        scale *= 1f + 0.15f * e;
-                        alpha *= 1f - e * e;
-                    }
-                    else alpha *= 1f - e;
+                    center.y += Mathf.Sin(Now * 1.6f + i * 1.3f) * 3f;
+                    spin += Mathf.Sin(Now * 1.1f + i * 2.1f) * 0.6f;
                 }
 
-                var r = ScaleAround(baseRect, scale);
-                r.y += dy;
-                GUI.color = new Color(1f, 1f, 1f, alpha);
-                DrawCard(r, cards[i], hover[i]);
-                GUI.color = Color.white;
+                // Hover: lift, grow, straighten, glow, sweep a highlight across.
+                bool interactive = dealt && !leaving;
+                bool over = interactive && Mouse.IsOver(slot);
+                if (over && hover[i] <= 0.001f)
+                {
+                    hoverStart[i] = Now;
+                    SoundDefOf.Mouseover_Standard.PlayOneShotOnCamera();
+                }
+                if (Event.current.type == EventType.Repaint)
+                    hover[i] = Mathf.MoveTowards(hover[i], over ? 1f : 0f, Time.unscaledDeltaTime * 7f);
+                float h = Style.EaseOutCubic(hover[i]);
+                center.y -= 18f * h;
+                scale *= 1f + 0.07f * h;
+                spin *= 1f - h;
+                if (!leaving && hovered >= 0 && hovered != i) alpha *= 0.8f; // let the hovered card stand out
 
-                if (interactive && Widgets.ButtonInvisible(baseRect)) Pick(i);
+                // Exit: the picked card rises to the middle, flashes and flips away; the others drop spinning.
+                float flip = 1f, flash = 0f;
+                if (leaving)
+                {
+                    if (i == picked)
+                    {
+                        float up = Style.EaseOutCubic(exit * 1.8f);
+                        center = Vector2.Lerp(center, new Vector2(inRect.center.x, inRect.center.y - 10f), up);
+                        scale *= 1f + 0.18f * up;
+                        flash = Mathf.Clamp01(1f - Mathf.Abs(exit - 0.45f) / 0.15f);
+                        flip = exit < 0.5f ? 1f : Mathf.Cos((exit - 0.5f) / 0.5f * Mathf.PI * 0.5f);
+                        if (!burst && exit >= 0.45f)
+                        {
+                            burst = true;
+                            Style.Burst(particles, center, cards[i].KindColor, 52);
+                        }
+                    }
+                    else
+                    {
+                        float fall = Style.EaseInCubic(exit * 1.2f);
+                        center.y += fall * 520f;
+                        spin += fall * (picked < 0 ? fan * 20f : (i < picked ? -28f : 28f));
+                        alpha *= 1f - Style.EaseOutCubic(exit * 1.3f);
+                    }
+                }
+
+                if (alpha <= 0.01f || flip <= 0.01f) continue;
+                var r = new Rect(center.x - CardWidth * scale * flip / 2f, center.y - CardHeight * scale / 2f, CardWidth * scale * flip, CardHeight * scale);
+                var matrix = GUI.matrix;
+                if (Mathf.Abs(spin) > 0.01f) GUIUtility.RotateAroundPivot(spin, r.center);
+                GUI.color = new Color(1f, 1f, 1f, alpha);
+                if (flip > 0.35f) DrawCard(r, cards[i], h, Now - hoverStart[i], flash, i);
+                else DrawCardBack(r, cards[i].KindColor);
+                GUI.color = Color.white;
+                GUI.matrix = matrix;
+
+                if (interactive && Widgets.ButtonInvisible(slot)) Pick(i);
             }
 
-            // Skip button.
-            var skipRect = new Rect(inRect.center.x - 80f, inRect.yMax - 40f, 160f, 36f);
-            if (allowSkip && picked < 0 && !skipped && Widgets.ButtonText(skipRect, "Skip reward")) Skip();
+            Style.UpdateAndDraw(particles);
 
-            if ((picked >= 0 || skipped) && !resolved && Now - pickedAt >= ExitDuration)
+            // Skip button fades in once the cards are down.
+            if (allowSkip && !leaving)
+            {
+                var skipRect = new Rect(inRect.center.x - 90f, y0 + CardHeight + 44f, 180f, 38f);
+                GUI.color = new Color(1f, 1f, 1f, Style.EaseOutCubic((t - 0.6f) / 0.4f));
+                if (Widgets.ButtonText(skipRect, "Skip reward")) Skip();
+                GUI.color = Color.white;
+            }
+
+            if (leaving && !resolved && exit >= 1f)
             {
                 resolved = true;
                 var choice = picked >= 0 ? cards[picked] : null;
@@ -148,71 +216,103 @@ namespace Roguelike
             }
         }
 
-        private static Rect ScaleAround(Rect r, float s)
-        {
-            var c = r.center;
-            return new Rect(c.x - r.width * s / 2f, c.y - r.height * s / 2f, r.width * s, r.height * s);
-        }
+        private static Texture2D researchIcon;
+        private static Texture2D ResearchIcon => researchIcon ??= DefDatabase<MainButtonDef>.GetNamedSilentFail("Research")?.Icon;
 
-        private static void DrawCard(Rect r, RewardCard card, float hover)
+        private static bool IsRare(RewardCard card) =>
+            card.kind == RewardKind.Relic && card.relic.rarity == RelicRarity.Rare || card.kind == RewardKind.Path && card.pathNode.IsBoss;
+
+        private static void DrawCard(Rect r, RewardCard card, float hover, float hoverAge, float flash, int index)
         {
             float a = GUI.color.a;
             var kind = card.KindColor;
+            bool rare = IsRare(card);
 
-            // Body and border.
-            Widgets.DrawBoxSolid(r, new Color(0.12f, 0.12f, 0.13f, 0.97f * a));
-            var border = Color.Lerp(kind * 0.8f, Color.white, hover * 0.4f);
-            border.a = a;
-            Widgets.DrawBoxSolidWithOutline(r, Color.clear, border, 2);
+            // Drop shadow and coloured aura; rare cards breathe.
+            Style.Tex(new Rect(r.x + 10f, r.y + 22f, r.width, r.height).ExpandedBy(20f), Style.SoftGlow, new Color(0f, 0f, 0f, 0.7f));
+            float aura = 0.1f + 0.4f * hover + (rare ? 0.18f * Style.Pulse(2.4f, index) : 0f);
+            Style.GlowAround(r, new Color(kind.r, kind.g, kind.b, aura), 1.3f, Style.SoftGlow);
 
-            // Kind banner.
-            var banner = new Rect(r.x, r.y, r.width, 26f);
-            Widgets.DrawBoxSolid(banner, new Color(kind.r, kind.g, kind.b, 0.85f * a));
-            Text.Font = GameFont.Small;
+            // Body, frame and inner bevel.
+            Style.Tex(r, Style.CardBody, Color.white);
+            var frame = Color.Lerp(kind * 0.8f, Color.white, 0.3f * hover);
+            Style.Border(r, new Color(frame.r, frame.g, frame.b, 1f), 2f);
+            Style.Border(r.ContractedBy(5f), new Color(kind.r, kind.g, kind.b, 0.25f), 1f);
+            Style.Box(new Rect(r.x + 2f, r.y + 2f, r.width - 4f, 1f), new Color(1f, 1f, 1f, 0.12f)); // top highlight
+
+            // Banner with the card's kind.
+            var banner = new Rect(r.x + 2f, r.y + 2f, r.width - 4f, 28f);
+            Style.Box(banner, new Color(kind.r * 0.45f, kind.g * 0.45f, kind.b * 0.45f, 0.95f));
+            Style.Tex(banner, Style.BannerFade, new Color(kind.r, kind.g, kind.b, 0.55f));
+            Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = new Color(0f, 0f, 0f, a);
-            Widgets.Label(banner, card.KindLabel.ToUpperInvariant());
+            Style.ShadowLabel(banner, card.KindLabel.ToUpperInvariant(), new Color(1f, 0.97f, 0.9f));
 
             // Title.
-            GUI.color = new Color(1f, 1f, 1f, a);
-            var titleRect = new Rect(r.x + 8f, banner.yMax + 4f, r.width - 16f, 44f);
-            Widgets.Label(titleRect, card.Title);
+            Text.Font = GameFont.Small;
+            var titleRect = new Rect(r.x + 10f, banner.yMax + 6f, r.width - 20f, 42f);
+            Style.ShadowLabel(titleRect, card.Title, Style.Parchment);
             Text.Anchor = TextAnchor.UpperLeft;
 
-            // Art.
-            var art = new Rect(r.center.x - 48f, titleRect.yMax + 2f, 96f, 96f);
+            // Art on a glowing plinth, bobbing gently.
+            float bob = Mathf.Sin(Style.Now * 2f + index) * 2f;
+            var art = new Rect(r.center.x - 50f, titleRect.yMax + 4f + bob, 100f, 100f);
+            Style.GlowAround(art, new Color(kind.r, kind.g, kind.b, 0.3f + 0.3f * hover), 1.8f);
             DrawArt(art, card);
 
+            // Ornamental divider.
+            float dy = titleRect.yMax + 116f;
+            Style.Box(new Rect(r.x + 24f, dy, r.width - 48f, 1f), new Color(kind.r, kind.g, kind.b, 0.5f));
+            Style.Tex(new Rect(r.center.x - 6f, dy - 6f, 12f, 12f), Style.Glow, new Color(kind.r, kind.g, kind.b, 0.9f));
+
             // Body text.
-            var body = new Rect(r.x + 10f, art.yMax + 8f, r.width - 20f, r.yMax - art.yMax - 14f);
+            var body = new Rect(r.x + 12f, dy + 8f, r.width - 24f, r.yMax - dy - 14f);
             Text.Font = GameFont.Tiny;
-            GUI.color = new Color(0.9f, 0.9f, 0.9f, a);
+            var old = GUI.color;
+            GUI.color = new Color(0.88f, 0.86f, 0.8f, a);
             Widgets.Label(body, BodyText(card));
+            GUI.color = old;
             Text.Font = GameFont.Small;
-            GUI.color = new Color(1f, 1f, 1f, a);
+
+            // Light sweep on hover, and the pick flash.
+            if (hover > 0.05f) Style.SheenSweep(r, Mathf.Repeat(hoverAge * 0.8f, 1.7f), 0.2f * hover);
+            if (flash > 0f) Style.Box(r, new Color(1f, 1f, 1f, 0.8f * flash));
+        }
+
+        private static void DrawCardBack(Rect r, Color kind)
+        {
+            Style.Tex(r, Style.CardBody, Color.white);
+            Style.Box(r, new Color(kind.r * 0.5f, kind.g * 0.5f, kind.b * 0.5f, 0.6f));
+            Style.Border(r, new Color(kind.r, kind.g, kind.b, 1f), 2f);
+            Style.GlowAround(r, new Color(kind.r, kind.g, kind.b, 0.6f), 0.6f);
         }
 
         private static void DrawArt(Rect art, RewardCard card)
         {
+            var tint = GUI.color;
             switch (card.kind)
             {
                 case RewardKind.Recruit:
-                    GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South));
+                    GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
+                    break;
+                case RewardKind.Research when ResearchIcon != null:
+                    GUI.DrawTexture(art.ContractedBy(16f), ResearchIcon);
                     break;
                 case RewardKind.Path when NodeIcons.For(card.pathNode) != null:
                     GUI.DrawTexture(art, NodeIcons.For(card.pathNode));
                     break;
                 case RewardKind.Relic when card.relic.iconThing != null:
-                    Widgets.DefIcon(art, card.relic.iconThing, color: GUI.color);
+                    Widgets.DefIcon(art, card.relic.iconThing, color: tint);
                     break;
                 case RewardKind.Gear:
                 case RewardKind.Implant:
-                    Widgets.DefIcon(art, card.gear.thing, card.gear.stuff, color: GUI.color);
+                    Widgets.DefIcon(art, card.gear.thing, card.gear.stuff, color: tint);
                     break;
                 case RewardKind.Blueprint when card.blueprint.buildings.Count > 0:
-                    Widgets.DefIcon(art, card.blueprint.buildings[0], GenStuff.DefaultStuffFor(card.blueprint.buildings[0]), color: GUI.color);
+                    Widgets.DefIcon(art, card.blueprint.buildings[0], GenStuff.DefaultStuffFor(card.blueprint.buildings[0]), color: tint);
                     break;
             }
+            GUI.color = tint;
         }
 
         public static string BodyText(RewardCard card)
@@ -228,6 +328,8 @@ namespace Roguelike
                     return "Adds to your build menu for this run:\n" + string.Join(", ", card.blueprint.buildings.Select(b => b.label));
                 case RewardKind.Recruit:
                     return RecruitSummary(card.recruit);
+                case RewardKind.Research:
+                    return "Completes this research right away.\n" + card.research.description.Split('\n')[0];
                 case RewardKind.Path:
                     return card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }

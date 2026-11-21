@@ -67,7 +67,7 @@ namespace Roguelike
             gated ??= new HashSet<BuildableDef>(DefDatabase<BlueprintGroupDef>.AllDefs.SelectMany(g => g.buildings));
     }
 
-    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit, Path }
+    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit, Path, Research }
 
     /// <summary>One card on the reward screen.</summary>
     public class RewardCard
@@ -79,6 +79,8 @@ namespace Roguelike
         public Pawn recruit;
         /// <summary>For Path cards: the node this card leads to.</summary>
         public RunNode pathNode;
+        /// <summary>For Research cards: the project the card completes.</summary>
+        public ResearchProjectDef research;
 
         public string Title => kind switch
         {
@@ -87,6 +89,7 @@ namespace Roguelike
             RewardKind.Blueprint => blueprint.LabelCap,
             RewardKind.Recruit => recruit.Name.ToStringFull,
             RewardKind.Path => (pathNode.IsBoss ? "Boss: " : "") + pathNode.preset.LabelCap,
+            RewardKind.Research => research.LabelCap,
             _ => "?",
         };
 
@@ -98,6 +101,7 @@ namespace Roguelike
             RewardKind.Blueprint => "Blueprint",
             RewardKind.Recruit => "Recruit",
             RewardKind.Path => pathNode.IsBoss ? $"Act {pathNode.act} boss" : GenText.SplitCamelCase(pathNode.preset.kind.ToString()),
+            RewardKind.Research => "Research",
             _ => "",
         };
 
@@ -109,6 +113,7 @@ namespace Roguelike
             RewardKind.Blueprint => new Color(0.85f, 0.5f, 0.25f),
             RewardKind.Recruit => new Color(0.45f, 0.8f, 0.4f),
             RewardKind.Path => pathNode.IsBoss ? new Color(0.85f, 0.3f, 0.25f) : pathNode.preset.HasMap ? new Color(0.55f, 0.55f, 0.6f) : new Color(0.4f, 0.65f, 0.85f),
+            RewardKind.Research => new Color(0.7f, 0.5f, 0.95f),
             _ => Color.white,
         };
     }
@@ -123,6 +128,18 @@ namespace Roguelike
 
         public static IEnumerable<BlueprintGroupDef> BlueprintPool(WorldComponent_RoguelikeRun run) =>
             DefDatabase<BlueprintGroupDef>.AllDefs.Where(b => !run.blueprints.Contains(b) && MetaProgress.IsAvailable(b));
+
+        /// <summary>Research the squad could start now (prerequisites done), up to industrial tech.</summary>
+        public static IEnumerable<ResearchProjectDef> ResearchPool() =>
+            DefDatabase<ResearchProjectDef>.AllDefs.Where(r => !r.IsFinished && r.PrerequisitesCompleted && r.techLevel <= TechLevel.Industrial);
+
+        /// <summary>Research that unlocks a gated objective or a blueprint building is offered more often.</summary>
+        public static float ResearchWeight(ResearchProjectDef r)
+        {
+            bool objective = DefDatabase<NodePresetDef>.AllDefs.Any(p => p.requiresResearch.Contains(r));
+            bool building = BlueprintGroupDef.Gated.Any(b => b.researchPrerequisites?.Contains(r) == true);
+            return objective ? 4f : building ? 2f : 1f;
+        }
 
         public static IEnumerable<GearRewardDef> GearPool(bool implant) =>
             DefDatabase<GearRewardDef>.AllDefs.Where(g => g.implant == implant && MetaProgress.IsAvailable(g));
@@ -152,11 +169,13 @@ namespace Roguelike
             var blueprints = BlueprintPool(run).Where(b => taken.All(c => c.blueprint != b)).ToList();
             var gear = GearPool(false).Where(g => taken.All(c => c.gear != g)).ToList();
             var implants = GearPool(true).Where(g => taken.All(c => c.gear != g)).ToList();
+            var research = ResearchPool().Where(r => taken.All(c => c.research != r)).ToList();
             var options = new List<(RewardKind kind, float weight)>();
             if (relics.Count > 0) options.Add((RewardKind.Relic, 30f));
             if (gear.Count > 0) options.Add((RewardKind.Gear, 30f));
             if (implants.Count > 0) options.Add((RewardKind.Implant, 15f));
             if (blueprints.Count > 0) options.Add((RewardKind.Blueprint, 25f));
+            if (research.Count > 0) options.Add((RewardKind.Research, 18f));
             if (options.Count == 0) return null;
             var kind = options.RandomElementByWeight(o => o.weight).kind;
             return kind switch
@@ -164,6 +183,7 @@ namespace Roguelike
                 RewardKind.Relic => new RewardCard { kind = kind, relic = relics.RandomElementByWeight(r => r.Weight) },
                 RewardKind.Gear => new RewardCard { kind = kind, gear = gear.RandomElement() },
                 RewardKind.Implant => new RewardCard { kind = kind, gear = implants.RandomElement() },
+                RewardKind.Research => new RewardCard { kind = kind, research = research.RandomElementByWeight(ResearchWeight) },
                 _ => new RewardCard { kind = kind, blueprint = blueprints.RandomElement() },
             };
         }
@@ -186,6 +206,10 @@ namespace Roguelike
                     break;
                 case RewardKind.Blueprint:
                     if (!run.blueprints.Contains(card.blueprint)) run.blueprints.Add(card.blueprint);
+                    break;
+                case RewardKind.Research:
+                    if (!card.research.IsFinished) Find.ResearchManager.FinishProject(card.research, doCompletionDialog: false, doCompletionLetter: false);
+                    Messages.Message($"Research complete: {card.research.LabelCap}.", MessageTypeDefOf.PositiveEvent);
                     break;
                 case RewardKind.Gear:
                 case RewardKind.Implant:

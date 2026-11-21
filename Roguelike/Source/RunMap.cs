@@ -657,6 +657,7 @@ namespace Roguelike
         private static readonly Material Open = Mat(new Color(1f, 0.85f, 0.3f, 0.95f));
         private static readonly Material Taken = Mat(new Color(1f, 1f, 1f, 0.9f));
         private static readonly Material Dead = Mat(new Color(0.4f, 0.4f, 0.4f, 0.3f));
+        private static readonly Material Spark = Mat(new Color(1f, 0.97f, 0.8f, 1f));
 
         private static Material Mat(Color c) => MaterialPool.MatFrom(GenDraw.LineTexPath, ShaderDatabase.WorldOverlayTransparent, c, 3590);
 
@@ -673,6 +674,14 @@ namespace Roguelike
                 Vector3 p = Vector3.Slerp(pa, pb, i / (float)Segments) * Lift;
                 GenDraw.DrawWorldLineBetween(prev, p, mat, width);
                 prev = p;
+            }
+            if (style != Style.Open) return;
+            // Open paths carry bright sparks flowing toward the choices.
+            float time = Time.realtimeSinceStartup;
+            for (int k = 0; k < 2; k++)
+            {
+                float f = Mathf.Repeat(time * 0.35f + k * 0.5f, 1f);
+                GenDraw.DrawWorldLineBetween(Vector3.Slerp(pa, pb, f) * Lift * 1.0003f, Vector3.Slerp(pa, pb, Mathf.Min(1f, f + 0.05f)) * Lift * 1.0003f, Spark, 3.2f);
             }
         }
     }
@@ -712,7 +721,8 @@ namespace Roguelike
                 if (n == null) return base.ExpandingIconColor;
                 return n.state switch
                 {
-                    RunNodeState.Available => n.IsBoss ? new Color(1f, 0.4f, 0.3f) : Color.white,
+                    // Choices breathe so they stand out from the rest of the graph.
+                    RunNodeState.Available => Color.Lerp(n.IsBoss ? new Color(0.7f, 0.25f, 0.2f) : new Color(0.75f, 0.68f, 0.45f), n.IsBoss ? new Color(1f, 0.45f, 0.35f) : new Color(1f, 0.95f, 0.75f), Roguelike.Style.Pulse(3f, nodeId)),
                     RunNodeState.Current => new Color(0.5f, 1f, 0.5f),
                     RunNodeState.Completed => new Color(0.55f, 0.55f, 0.55f),
                     RunNodeState.Skipped => new Color(0.3f, 0.3f, 0.3f, 0.6f),

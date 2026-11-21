@@ -32,77 +32,142 @@ namespace Roguelike
         public static bool Has(string name) => Icons.ContainsKey(name);
     }
 
-    /// <summary>A small panel on the map (top right) with the node's objective and weather as bars.</summary>
+    /// <summary>
+    /// A panel on the map (top right) with the node's icon, objective and weather as bars. The bars ease toward
+    /// their value, sheen when they grow, pulse red when the squad falls behind pace, and flash on completion.
+    /// </summary>
     [StaticConstructorOnStartup]
     public static class NodeHud
     {
-        private static readonly Color Back = new Color(0.08f, 0.08f, 0.09f, 0.85f);
-        private static readonly Texture2D Good = SolidColorMaterials.NewSolidColorTexture(new Color(0.35f, 0.75f, 0.35f));
-        private static readonly Texture2D Grace = SolidColorMaterials.NewSolidColorTexture(new Color(0.25f, 0.5f, 0.3f));
-        private static readonly Texture2D Warn = SolidColorMaterials.NewSolidColorTexture(new Color(0.9f, 0.7f, 0.25f));
-        private static readonly Texture2D Bad = SolidColorMaterials.NewSolidColorTexture(new Color(0.9f, 0.3f, 0.25f));
+        private static readonly Color GoodC = new Color(0.4f, 0.78f, 0.38f);
+        private static readonly Color GraceC = new Color(0.3f, 0.55f, 0.38f);
+        private static readonly Color WarnC = new Color(0.92f, 0.72f, 0.28f);
+        private static readonly Color BadC = new Color(0.92f, 0.32f, 0.27f);
 
-        public static Rect Area => new Rect(UI.screenWidth - 340f, 12f, 328f, 104f);
+        private static int shownMap = -1;
+        private static float shownProgress, shownWeather, completedAt = -1f, lastGain = -10f;
+
+        public static Rect Area => new Rect(UI.screenWidth - 372f, 12f, 360f, 108f);
 
         public static void Draw(MapComponent_RoguelikeNode c)
         {
             var r = Area;
-            Widgets.DrawBoxSolid(r, Back);
-            Widgets.DrawBox(r);
-            var inner = r.ContractedBy(8f);
             var run = WorldComponent_RoguelikeRun.Get;
             var node = run is { active: true } ? run.NodeAt(c.map.Tile) : null;
+            float dt = Event.current.type == EventType.Repaint ? Mathf.Min(Time.unscaledDeltaTime, 0.05f) : 0f;
 
+            float progress = c.completed ? 1f : c.Progress;
+            var cond = c.Condition;
+            float weather = cond == null || c.completed ? 0f
+                : c.InGrace ? Mathf.Clamp01((c.GraceDays - c.Days) / Mathf.Max(0.01f, c.GraceDays))
+                : Mathf.Clamp01(c.PaceFactor / Mathf.Max(1f, c.preset.maxPaceFactor));
+            if (shownMap != c.map.uniqueID)
+            {
+                shownMap = c.map.uniqueID;
+                shownProgress = progress;
+                shownWeather = weather;
+                completedAt = c.completed ? -100f : -1f;
+            }
+            if (progress > shownProgress + 0.001f) lastGain = Style.Now;
+            shownProgress = Mathf.Lerp(shownProgress, progress, 1f - Mathf.Exp(-6f * dt));
+            shownWeather = Mathf.Lerp(shownWeather, weather, 1f - Mathf.Exp(-6f * dt));
+            if (c.completed && completedAt == -1f) completedAt = Style.Now; // -100 = already complete when first shown, no flash
+
+            bool behind = cond != null && !c.completed && !c.InGrace && c.PaceFactor > 1.05f;
+            var accent = c.failed ? BadC : c.completed ? Style.Gold : behind ? BadC : node?.IsBoss == true ? BadC : Style.Gold;
+
+            // Panel: shadow, pulsing danger glow, gradient body, accent edge.
+            Style.Tex(new Rect(r.x + 4f, r.y + 8f, r.width, r.height).ExpandedBy(12f), Style.SoftGlow, new Color(0f, 0f, 0f, 0.55f));
+            if (behind) Style.GlowAround(r, new Color(BadC.r, BadC.g, BadC.b, 0.15f + 0.25f * Style.Pulse(3f)), 1.15f, Style.SoftGlow);
+            Style.Tex(r, Style.CardBody, new Color(1f, 1f, 1f, 0.94f));
+            Style.Border(r, new Color(accent.r * 0.7f, accent.g * 0.7f, accent.b * 0.7f, 0.9f), 1f);
+            Style.Box(new Rect(r.x, r.y, 3f, r.height), accent);
+
+            // Node icon.
+            var iconRect = new Rect(r.x + 10f, r.y + 10f, 52f, 52f);
+            var icon = node != null ? NodeIcons.For(node) : null;
+            Style.GlowAround(iconRect, new Color(accent.r, accent.g, accent.b, 0.25f + 0.1f * Style.Pulse(1.5f)), 1.6f);
+            if (icon != null) Style.Tex(iconRect, icon, Color.white);
+
+            var inner = new Rect(iconRect.xMax + 10f, r.y + 8f, r.xMax - iconRect.xMax - 20f, r.height - 16f);
             Text.Font = GameFont.Small;
-            string where = node != null ? $"  (act {run.act}, row {node.row + 1})" : "";
-            Widgets.Label(new Rect(inner.x, inner.y, inner.width, 22f), $"<b>{c.preset.LabelCap}</b>{where}");
+            Text.Anchor = TextAnchor.UpperLeft;
+            Style.ShadowLabel(new Rect(inner.x, inner.y, inner.width, 22f), c.preset.LabelCap, Style.Parchment);
+            if (node != null)
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.UpperRight;
+                Style.ShadowLabel(new Rect(inner.x, inner.y + 3f, inner.width, 18f), $"ACT {run.act} · ROW {node.row + 1}", new Color(accent.r, accent.g, accent.b, 0.9f));
+                Text.Anchor = TextAnchor.UpperLeft;
+            }
 
             // Objective bar.
-            var bar = new Rect(inner.x, inner.y + 24f, inner.width, 18f);
-            float progress = c.completed ? 1f : c.Progress;
-            Widgets.FillableBar(bar, progress, c.failed ? Bad : Good, BaseContent.ClearTex, true);
             Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(bar, c.failed ? "Failed" : c.completed ? "Complete: leave via the letter" : c.ProgressText);
-            Text.Anchor = TextAnchor.UpperLeft;
+            var bar = new Rect(inner.x, inner.y + 24f, inner.width, 18f);
+            Bar(bar, shownProgress, c.failed ? BadC : c.completed ? Style.Gold : GoodC, Style.Now - lastGain < 0.6f);
+            Style.ShadowLabel(BarText(bar), c.failed ? "Failed" : c.completed ? "Complete: leave via the letter" : c.ProgressText, Color.white);
 
-            // Weather: intensity and pace.
-            var cond = c.Condition;
-            var weather = new Rect(inner.x, inner.y + 46f, inner.width, 18f);
+            // Weather bar: intensity and pace.
+            var wbar = new Rect(inner.x, inner.y + 46f, inner.width, 18f);
             if (cond == null)
             {
-                Widgets.Label(weather, "No weather modifier.");
+                Style.ShadowLabel(BarText(wbar), "No weather modifier.", new Color(1f, 1f, 1f, 0.7f));
             }
             else if (c.completed)
             {
-                Widgets.Label(weather, $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)} (stopped worsening)");
+                Style.ShadowLabel(BarText(wbar), $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)} (stopped worsening)", new Color(1f, 1f, 1f, 0.8f));
             }
             else if (c.InGrace)
             {
-                float left = c.GraceDays - c.Days;
-                Widgets.FillableBar(weather, Mathf.Clamp01(left / Mathf.Max(0.01f, c.GraceDays)), Grace, BaseContent.ClearTex, true);
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(weather, $"{cond.def.LabelCap}: holding off {left:0.0} more days");
-                Text.Anchor = TextAnchor.UpperLeft;
+                Bar(wbar, shownWeather, GraceC, false);
+                Style.ShadowLabel(BarText(wbar), $"{cond.def.LabelCap}: holding off {c.GraceDays - c.Days:0.0} more days", Color.white);
             }
             else
             {
                 float pace = c.PaceFactor;
-                var color = pace < 0.95f ? Good : pace > 1.05f ? Bad : Warn;
-                // The bar shows how fast it is worsening relative to the fastest it can go.
-                float max = Mathf.Max(1f, c.preset.maxPaceFactor);
-                Widgets.FillableBar(weather, Mathf.Clamp01(pace / max), color, BaseContent.ClearTex, true);
-                Text.Anchor = TextAnchor.MiddleCenter;
+                var color = pace < 0.95f ? GoodC : pace > 1.05f ? BadC : WarnC;
+                Bar(wbar, shownWeather, color, false);
                 string state = pace < 0.95f ? "ahead of pace" : pace > 1.05f ? "behind pace" : "on pace";
-                Widgets.Label(weather, $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)}, x{pace:0.00} ({state})");
-                Text.Anchor = TextAnchor.UpperLeft;
+                Style.ShadowLabel(BarText(wbar), $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)}, x{pace:0.00} ({state})", Color.white);
             }
 
-            GUI.color = new Color(1f, 1f, 1f, 0.6f);
-            Widgets.Label(new Rect(inner.x, inner.y + 68f, inner.width, 18f), $"Day {c.Days:0.0}" + (c.nextPatrolTick > 0 ? $"  ·  next patrol in {(c.nextPatrolTick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}" : ""));
-            GUI.color = Color.white;
+            Style.ShadowLabel(new Rect(inner.x, inner.y + 70f, inner.width, 18f),
+                $"Day {c.Days:0.0}" + (c.nextPatrolTick > 0 ? $"  ·  next patrol in {(c.nextPatrolTick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}" : ""),
+                new Color(1f, 1f, 1f, 0.6f));
+
+            // Completion flash and a sheen across the whole panel.
+            if (completedAt > 0f)
+            {
+                float since = Style.Now - completedAt;
+                if (since < 1.2f)
+                {
+                    Style.Box(r, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.35f * (1f - since / 1.2f)));
+                    Style.SheenSweep(r, since / 1.2f, 0.35f);
+                }
+            }
+
             Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.UpperLeft;
             TooltipHandler.TipRegion(r, () => new Alert_RoguelikeNode().GetExplanation(), 0x52_4C_4E_44);
+        }
+
+        private static Rect BarText(Rect bar)
+        {
+            Text.Anchor = TextAnchor.MiddleCenter;
+            return bar;
+        }
+
+        /// <summary>A recessed track with a two-tone fill, a bright leading edge and an optional sheen.</summary>
+        private static void Bar(Rect r, float fill, Color c, bool sheen)
+        {
+            Style.Box(r, new Color(0f, 0f, 0f, 0.45f));
+            Style.Border(r, new Color(1f, 1f, 1f, 0.08f), 1f);
+            if (fill <= 0.001f) return;
+            var f = new Rect(r.x + 1f, r.y + 1f, (r.width - 2f) * Mathf.Clamp01(fill), r.height - 2f);
+            Style.Box(f, new Color(c.r * 0.6f, c.g * 0.6f, c.b * 0.6f, 0.95f));
+            Style.Box(new Rect(f.x, f.y, f.width, f.height * 0.5f), new Color(c.r, c.g, c.b, 0.55f));
+            Style.Tex(new Rect(f.xMax - 6f, f.y - 4f, 12f, f.height + 8f), Style.Glow, new Color(c.r, c.g, c.b, 0.8f));
+            if (sheen) Style.SheenSweep(f, Mathf.Repeat(Style.Now * 1.4f, 1f), 0.35f);
         }
     }
 

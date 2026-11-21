@@ -4,6 +4,7 @@ using HarmonyLib;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.Sound;
 
 namespace Roguelike
 {
@@ -158,72 +159,281 @@ namespace Roguelike
         }
     }
 
-    /// <summary>The list of unlocks with buy buttons, used by the unlock dialog and the mod settings page.</summary>
+    /// <summary>
+    /// The meta-progression screen, used by the unlock dialog and the mod settings page: an animated points counter,
+    /// the Ascension track, and unlocks as tiles grouped by kind. Clicking an affordable tile buys it.
+    /// </summary>
     public static class UnlockList
     {
+        private static readonly Color StarterC = new Color(0.45f, 0.8f, 0.42f);
+        private static readonly Color VarietyC = new Color(0.45f, 0.62f, 0.9f);
+        private static readonly Color AscensionC = new Color(0.92f, 0.38f, 0.3f);
+        private const float HeaderH = 96f;
+        private const float TileH = 138f;
+        private const float Gap = 12f;
+
         private static Vector2 scroll;
+        private static float openedAt, lastDrawn = -10f, shownPoints;
+        private static readonly Dictionary<string, float> bought = new Dictionary<string, float>();
+        private static readonly Dictionary<string, float> hover = new Dictionary<string, float>();
+        private static readonly List<Style.Particle> particles = new List<Style.Particle>();
+        private static readonly List<(string text, float at)> floaters = new List<(string, float)>();
+
+        private static readonly Dictionary<string, ThingDef> starterIcons = new Dictionary<string, ThingDef>();
+
+        /// <summary>A starter shows its signature relic's icon when it has a distinct one.</summary>
+        private static ThingDef StarterIcon(UnlockDef u)
+        {
+            if (u.starterId == null) return null;
+            if (starterIcons.TryGetValue(u.starterId, out var icon)) return icon;
+            icon = DefDatabase<ScenarioDef>.AllDefs
+                .SelectMany(d => d.scenario.AllParts.OfType<ScenPart_RoguelikeRun>())
+                .FirstOrDefault(p => p.starterId == u.starterId)?.starterRelic?.iconThing;
+            if (icon == ThingDefOf.Gold) icon = null; // placeholder icon: the emblem reads better
+            return starterIcons[u.starterId] = icon;
+        }
+
+        private static Color KindColor(UnlockDef u) => u.starterId != null ? StarterC : u.IsPower ? Style.Gold : VarietyC;
 
         public static void Draw(Rect rect)
         {
             var s = MetaProgress.S;
-            Text.Font = GameFont.Medium;
-            Widgets.Label(new Rect(rect.x, rect.y, rect.width, 34f), $"Meta points: {s.points}");
-            Text.Font = GameFont.Small;
-            GUI.color = new Color(1f, 1f, 1f, 0.7f);
-            Widgets.Label(new Rect(rect.x, rect.y + 34f, rect.width, 24f), $"Runs: {s.runs}, wins: {s.wins}. Earn points by clearing nodes (+1), beating the boss (+5) and skipping rewards (+1).");
-            GUI.color = Color.white;
-
-            // Ascension picker for new runs; each level stacks one more handicap.
-            int asc = MetaProgress.SelectedAscension;
-            var ascRect = new Rect(rect.xMax - 300f, rect.y, 300f, 30f);
-            if (s.maxAscension > 0)
+            float now = Style.Now;
+            if (now - lastDrawn > 0.5f)
             {
-                if (asc > 0 && Widgets.ButtonText(new Rect(ascRect.x, ascRect.y, 30f, 30f), "-")) { s.selectedAscension = asc - 1; MetaProgress.Save(); }
-                Widgets.Label(new Rect(ascRect.x + 36f, ascRect.y + 4f, 200f, 26f), $"Ascension {asc} of {s.maxAscension}");
-                if (asc < s.maxAscension && Widgets.ButtonText(new Rect(ascRect.x + 240f, ascRect.y, 30f, 30f), "+")) { s.selectedAscension = asc + 1; MetaProgress.Save(); }
-                TooltipHandler.TipRegion(ascRect, string.Join("\n", Enumerable.Range(1, MetaProgress.MaxAscension).Select(l => $"{l}: {MetaProgress.AscensionEffects[l]}")) +
-                                                  "\n\nLevels stack. Win at your highest level to unlock the next.");
+                // Freshly opened: replay the entrance and start the counter from the real value.
+                openedAt = now;
+                shownPoints = s.points;
+                floaters.Clear();
+                particles.Clear();
             }
+            lastDrawn = now;
+            float t = now - openedAt;
+            if (Event.current.type == EventType.Repaint)
+                shownPoints = Mathf.Lerp(shownPoints, s.points, 1f - Mathf.Exp(-8f * Mathf.Min(Time.unscaledDeltaTime, 0.05f)));
 
-            var defs = DefDatabase<UnlockDef>.AllDefs.OrderBy(u => u.KindLabel).ThenBy(u => u.cost).ToList();
-            const float rowH = 54f;
-            var outer = new Rect(rect.x, rect.y + 66f, rect.width, rect.height - 66f);
-            var view = new Rect(0f, 0f, outer.width - 16f, defs.Count * rowH);
+            DrawHeader(new Rect(rect.x, rect.y, rect.width, HeaderH), s, t);
+
+            // Tiles, grouped by kind.
+            var groups = DefDatabase<UnlockDef>.AllDefs.GroupBy(u => u.KindLabel).OrderBy(g => g.Key == "Starter" ? 0 : g.Key == "Variety" ? 1 : 2).ToList();
+            var outer = new Rect(rect.x, rect.y + HeaderH + 8f, rect.width, rect.height - HeaderH - 8f);
+            float viewW = outer.width - 16f;
+            int cols = Mathf.Max(1, Mathf.FloorToInt((viewW + Gap) / (210f + Gap)));
+            float tileW = (viewW - (cols - 1) * Gap) / cols;
+            float viewH = groups.Sum(g => 34f + Mathf.CeilToInt(g.Count() / (float)cols) * (TileH + Gap));
+            var view = new Rect(0f, 0f, viewW, viewH);
             Widgets.BeginScrollView(outer, ref scroll, view);
-            for (int i = 0; i < defs.Count; i++)
+            float y = 0f;
+            int index = 0;
+            foreach (var g in groups)
             {
-                var u = defs[i];
-                var row = new Rect(0f, i * rowH, view.width, rowH - 4f);
-                if (i % 2 == 0) Widgets.DrawLightHighlight(row);
-                bool owned = MetaProgress.IsUnlocked(u);
-                Widgets.Label(new Rect(row.x + 6f, row.y + 2f, row.width - 160f, 24f), $"<b>{u.LabelCap}</b>  ({u.KindLabel})");
-                GUI.color = new Color(1f, 1f, 1f, 0.75f);
-                Text.Font = GameFont.Tiny;
-                Widgets.Label(new Rect(row.x + 6f, row.y + 24f, row.width - 160f, 26f), u.description);
+                var color = g.Key == "Starter" ? StarterC : g.Key == "Power" ? Style.Gold : VarietyC;
                 Text.Font = GameFont.Small;
-                GUI.color = Color.white;
-                var button = new Rect(row.xMax - 140f, row.y + 10f, 130f, 30f);
-                if (owned) Widgets.Label(button, "Unlocked");
-                else if (Widgets.ButtonText(button, $"Buy ({u.cost})", active: MetaProgress.CanBuy(u)) && MetaProgress.CanBuy(u))
-                    MetaProgress.TryBuy(u);
+                Style.ShadowLabel(new Rect(0f, y + 4f, 200f, 24f), g.Key == "Starter" ? "Starters" : g.Key == "Power" ? "Permanent bonuses" : "More in the pools", color);
+                var size = Text.CalcSize(g.Key == "Starter" ? "Starters" : g.Key == "Power" ? "Permanent bonuses" : "More in the pools");
+                Style.Box(new Rect(size.x + 12f, y + 16f, viewW - size.x - 12f, 1f), new Color(color.r, color.g, color.b, 0.35f));
+                y += 34f;
+                int i = 0;
+                foreach (var u in g.OrderBy(u => MetaProgress.IsUnlocked(u)).ThenBy(u => u.cost).ThenBy(u => u.label))
+                {
+                    var tile = new Rect((i % cols) * (tileW + Gap), y + (i / cols) * (TileH + Gap), tileW, TileH);
+                    bool visible = tile.yMax >= scroll.y && tile.y <= scroll.y + outer.height;
+                    if (visible) DrawTile(tile, u, s, t - 0.15f - index * 0.025f);
+                    i++;
+                    index++;
+                }
+                y += Mathf.CeilToInt(i / (float)cols) * (TileH + Gap);
             }
+            Style.UpdateAndDraw(particles);
             Widgets.EndScrollView();
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.UpperLeft;
+        }
+
+        private static void DrawHeader(Rect r, RoguelikeSettings s, float t)
+        {
+            Style.Tex(r, Style.CardBody, Color.white);
+            Style.Tex(new Rect(r.x, r.y, r.width * 0.6f, r.height), Style.BannerFade, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.12f));
+            Style.Border(r, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.45f), 1f);
+            Style.Box(new Rect(r.x, r.y, 3f, r.height), Style.Gold);
+
+            // Points: a glowing emblem and a counter that rolls toward the real value.
+            var emblem = new Rect(r.x + 18f, r.center.y - 24f, 48f, 48f);
+            Style.GlowAround(emblem, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.45f + 0.15f * Style.Pulse(2f)), 1.9f);
+            Style.Tex(emblem.ContractedBy(10f), Style.Glow, Color.white);
+            Style.Tex(emblem.ContractedBy(4f), Style.SoftGlow, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.9f));
+            Text.Font = GameFont.Tiny;
+            Style.ShadowLabel(new Rect(emblem.xMax + 14f, r.y + 12f, 200f, 18f), "META POINTS", new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.85f));
+            Text.Font = GameFont.Medium;
+            var pointsRect = new Rect(emblem.xMax + 14f, r.y + 28f, 200f, 36f);
+            float swell = Mathf.Clamp01(Mathf.Abs(shownPoints - s.points));
+            var m = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(Vector2.one * (1.35f + 0.15f * swell), new Vector2(pointsRect.x, pointsRect.center.y));
+            Style.ShadowLabel(pointsRect, Mathf.RoundToInt(shownPoints).ToString(), Color.Lerp(Color.white, Style.Gold, 0.5f + 0.5f * swell));
+            GUI.matrix = m;
+            Text.Font = GameFont.Tiny;
+            Style.ShadowLabel(new Rect(emblem.xMax + 14f, r.y + 66f, 420f, 18f),
+                $"{s.runs} runs · {s.wins} wins  ·  +1 per node, +5 per boss, +1 per skipped reward", new Color(1f, 1f, 1f, 0.6f));
+
+            // Points spent float up from the counter.
+            for (int i = floaters.Count - 1; i >= 0; i--)
+            {
+                float age = Style.Now - floaters[i].at;
+                if (age > 1.2f) { floaters.RemoveAt(i); continue; }
+                Text.Font = GameFont.Small;
+                Style.ShadowLabel(new Rect(pointsRect.x + 70f, pointsRect.y - age * 30f, 80f, 24f), floaters[i].text, new Color(1f, 0.45f, 0.35f, 1f - age / 1.2f));
+            }
+
+            // Ascension track: one pip per level; click an unlocked level to choose it for new runs.
+            Text.Font = GameFont.Tiny;
+            var track = new Rect(r.xMax - 330f, r.y + 12f, 310f, r.height - 24f);
+            Text.Anchor = TextAnchor.UpperRight;
+            Style.ShadowLabel(new Rect(track.x, track.y, track.width, 18f), s.maxAscension > 0 ? $"ASCENSION {MetaProgress.SelectedAscension}" : "ASCENSION: WIN A RUN TO UNLOCK", new Color(AscensionC.r, AscensionC.g, AscensionC.b, 0.95f));
+            Text.Anchor = TextAnchor.UpperLeft;
+            int sel = MetaProgress.SelectedAscension;
+            float pip = 34f, step = (track.width - pip) / MetaProgress.MaxAscension;
+            float py = track.y + 30f;
+            Style.Box(new Rect(track.x + pip / 2f, py + pip / 2f - 1f, track.width - pip, 2f), new Color(1f, 1f, 1f, 0.12f));
+            Style.Box(new Rect(track.x + pip / 2f, py + pip / 2f - 1f, step * sel, 2f), AscensionC);
+            for (int l = 0; l <= MetaProgress.MaxAscension; l++)
+            {
+                var pr = new Rect(track.x + l * step, py, pip, pip);
+                bool open = l <= s.maxAscension, chosen = l == sel, over = open && Mouse.IsOver(pr);
+                float appear = Style.EaseOutBack((t - 0.2f - l * 0.06f) / 0.4f);
+                pr = new Rect(pr.center.x - pip * appear / 2f, pr.center.y - pip * appear / 2f, pip * appear, pip * appear);
+                if (chosen) Style.GlowAround(pr, new Color(AscensionC.r, AscensionC.g, AscensionC.b, 0.5f + 0.25f * Style.Pulse(3f)), 2.2f);
+                else if (over) Style.GlowAround(pr, new Color(AscensionC.r, AscensionC.g, AscensionC.b, 0.35f), 1.8f);
+                Style.Tex(pr, Style.CardBody, Color.white);
+                Style.Box(pr, l <= sel ? new Color(AscensionC.r, AscensionC.g, AscensionC.b, 0.55f) : new Color(1f, 1f, 1f, open ? 0.06f : 0.02f));
+                Style.Border(pr, open ? new Color(AscensionC.r, AscensionC.g, AscensionC.b, chosen ? 1f : 0.6f) : new Color(1f, 1f, 1f, 0.15f), chosen ? 2f : 1f);
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Style.ShadowLabel(pr, l.ToString(), open ? Color.white : new Color(1f, 1f, 1f, 0.3f));
+                Text.Anchor = TextAnchor.UpperLeft;
+                TooltipHandler.TipRegion(pr, l == 0 ? "Ascension 0: no handicaps."
+                    : $"Ascension {l}: {MetaProgress.AscensionEffects[l]}\nLevels stack: " + string.Join(" ", Enumerable.Range(1, l).Select(k => MetaProgress.AscensionEffects[k])) +
+                      (open ? "" : "\n\nLocked. Win at your highest level to unlock the next."));
+                if (open && !chosen && Widgets.ButtonInvisible(pr))
+                {
+                    s.selectedAscension = l;
+                    MetaProgress.Save();
+                    SoundDefOf.Tick_High.PlayOneShotOnCamera();
+                }
+            }
+            Text.Font = GameFont.Small;
+        }
+
+        private static void DrawTile(Rect tile, UnlockDef u, RoguelikeSettings s, float t)
+        {
+            float appear = Style.EaseOutCubic(t / 0.35f);
+            if (appear <= 0f) return;
+            bool owned = MetaProgress.IsUnlocked(u), affordable = MetaProgress.CanBuy(u);
+            var c = KindColor(u);
+            bool over = !owned && Mouse.IsOver(tile);
+            float h = hover.TryGetValue(u.defName, out var hv) ? hv : 0f;
+            if (Event.current.type == EventType.Repaint) hover[u.defName] = h = Mathf.MoveTowards(h, over ? 1f : 0f, Time.unscaledDeltaTime * 8f);
+            float flash = bought.TryGetValue(u.defName, out var at) ? Mathf.Clamp01(1f - (Style.Now - at) / 0.7f) : 0f;
+
+            var r = tile;
+            r.y += (1f - appear) * 20f - 4f * h * (affordable ? 1f : 0.3f);
+            var old = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, appear * (owned ? 0.8f : affordable ? 1f : 0.7f));
+
+            float aura = (affordable ? 0.12f + 0.1f * Style.Pulse(2.2f, tile.x * 0.01f) : 0f) + 0.3f * h + 0.6f * flash;
+            if (aura > 0f) Style.GlowAround(r, new Color(c.r, c.g, c.b, aura), 1.15f, Style.SoftGlow);
+            Style.Tex(r, Style.CardBody, Color.white);
+            Style.Box(r, new Color(c.r, c.g, c.b, owned ? 0.08f : 0.04f + 0.06f * h));
+            Style.Border(r, owned ? new Color(StarterC.r, StarterC.g, StarterC.b, 0.6f) : new Color(c.r, c.g, c.b, affordable ? 0.75f + 0.25f * h : 0.3f), affordable || owned ? 1.5f : 1f);
+            Style.Box(new Rect(r.x, r.y, r.width, 2f), new Color(c.r, c.g, c.b, 0.9f));
+
+            // Icon.
+            var icon = new Rect(r.x + 10f, r.y + 12f, 40f, 40f);
+            Style.GlowAround(icon, new Color(c.r, c.g, c.b, 0.35f), 1.6f);
+            var thing = u.relic?.iconThing ?? u.gear?.thing ?? (u.blueprint != null && u.blueprint.buildings.Count > 0 ? u.blueprint.buildings[0] : null) ?? StarterIcon(u);
+            if (thing != null) Widgets.DefIcon(icon, thing, GenStuff.DefaultStuffFor(thing), color: GUI.color);
+            else
+            {
+                Text.Font = GameFont.Medium;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Style.ShadowLabel(icon, u.KindLabel.Substring(0, 1), c);
+            }
+
+            // Title, kind and description.
+            Text.Anchor = TextAnchor.UpperLeft;
+            Text.Font = GameFont.Small;
+            Style.ShadowLabel(new Rect(icon.xMax + 8f, r.y + 10f, r.width - icon.width - 26f, 22f), u.LabelCap.Truncate(r.width - icon.width - 26f), Style.Parchment);
+            Text.Font = GameFont.Tiny;
+            Style.ShadowLabel(new Rect(icon.xMax + 8f, r.y + 32f, r.width - icon.width - 26f, 18f), u.KindLabel.ToUpperInvariant(), new Color(c.r, c.g, c.b, 0.9f));
+            var oldColor = GUI.color;
+            GUI.color = new Color(0.86f, 0.84f, 0.78f, GUI.color.a);
+            Widgets.Label(new Rect(r.x + 10f, icon.yMax + 8f, r.width - 20f, r.yMax - icon.yMax - 40f), u.description);
+            GUI.color = oldColor;
+
+            // Footer: cost badge or owned mark.
+            var foot = new Rect(r.x + 10f, r.yMax - 28f, r.width - 20f, 20f);
+            Text.Anchor = TextAnchor.MiddleRight;
+            if (owned) Style.ShadowLabel(foot, "✓ OWNED", StarterC);
+            else
+            {
+                var badge = new Rect(foot.xMax - 64f, foot.y - 2f, 64f, 24f);
+                Style.Box(badge, new Color(0f, 0f, 0f, 0.45f));
+                Style.Border(badge, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, affordable ? 0.9f : 0.3f), 1f);
+                Style.Tex(new Rect(badge.x + 4f, badge.center.y - 7f, 14f, 14f), Style.Glow, Style.Gold);
+                Text.Font = GameFont.Small;
+                Style.ShadowLabel(new Rect(badge.x, badge.y, badge.width - 8f, badge.height), u.cost.ToString(), affordable ? Style.Gold : new Color(0.7f, 0.5f, 0.45f));
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                if (over) Style.ShadowLabel(foot, affordable ? "Click to unlock" : $"Need {u.cost - s.points} more", new Color(1f, 1f, 1f, 0.7f));
+            }
+            Text.Anchor = TextAnchor.UpperLeft;
+            Text.Font = GameFont.Small;
+
+            if (h > 0.05f && affordable) Style.SheenSweep(r, Mathf.Repeat(Style.Now * 0.7f, 1.6f), 0.15f * h);
+            if (flash > 0f) Style.Box(r, new Color(1f, 1f, 1f, 0.6f * flash));
+            GUI.color = old;
+
+            if (affordable && Widgets.ButtonInvisible(tile) && MetaProgress.TryBuy(u))
+            {
+                bought[u.defName] = Style.Now;
+                Style.Burst(particles, r.center, c, 40, 260f);
+                floaters.Add(($"-{u.cost}", Style.Now));
+                SoundDefOf.Tick_High.PlayOneShotOnCamera();
+            }
         }
     }
 
     public class Dialog_Unlocks : Window
     {
+        private float openedAt = -1f;
+
         public Dialog_Unlocks()
         {
-            doCloseButton = true;
-            doCloseX = true;
+            doCloseX = false;
             forcePause = true;
             absorbInputAroundWindow = true;
+            doWindowBackground = false;
+            drawShadow = false;
         }
 
-        public override Vector2 InitialSize => new Vector2(760f, 640f);
+        public override Vector2 InitialSize => new Vector2(900f, 700f);
 
-        public override void DoWindowContents(Rect inRect) => UnlockList.Draw(new Rect(inRect.x, inRect.y, inRect.width, inRect.height - 50f));
+        protected override float Margin => 0f;
+
+        public override void DoWindowContents(Rect inRect)
+        {
+            if (openedAt < 0f) openedAt = Style.Now;
+            float a = Style.EaseOutCubic((Style.Now - openedAt) / 0.3f);
+            GUI.color = new Color(1f, 1f, 1f, a);
+            Style.Tex(inRect.ContractedBy(6f), Style.CardBody, Color.white);
+            Style.Border(inRect.ContractedBy(6f), new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.6f), 1f);
+            var body = inRect.ContractedBy(22f);
+            Text.Font = GameFont.Medium;
+            Style.ShadowLabel(new Rect(body.x, body.y, body.width, 34f), "Unlocks", Style.Gold);
+            Text.Font = GameFont.Small;
+            UnlockList.Draw(new Rect(body.x, body.y + 42f, body.width, body.height - 42f - 52f));
+            if (Style.Button(new Rect(body.center.x - 90f, body.yMax - 40f, 180f, 38f), "Done", Style.Gold)) Close();
+            GUI.color = Color.white;
+        }
     }
 
     /// <summary>Shown when a run is won or lost: what happened, what you earned, and where to go next.</summary>
@@ -240,38 +450,89 @@ namespace Roguelike
             absorbInputAroundWindow = true;
             closeOnClickedOutside = false;
             doCloseX = false;
+            doWindowBackground = false;
+            drawShadow = false;
         }
 
-        public override Vector2 InitialSize => new Vector2(680f, 500f);
+        public override Vector2 InitialSize => new Vector2(720f, 470f);
+
+        public override void WindowOnGUI()
+        {
+            // Dim the game behind the panel.
+            Style.Box(new Rect(0f, 0f, UI.screenWidth, UI.screenHeight), new Color(0f, 0f, 0f, 0.55f * Style.EaseOutCubic(openedAt < 0f ? 0f : (Style.Now - openedAt) / 0.4f)));
+            base.WindowOnGUI();
+        }
+
+        private float openedAt = -1f;
+        private readonly List<Style.Particle> particles = new List<Style.Particle>();
 
         public override void DoWindowContents(Rect inRect)
         {
             var run = WorldComponent_RoguelikeRun.Get;
+            if (openedAt < 0f)
+            {
+                openedAt = Style.Now;
+                if (won) Style.Burst(particles, new Vector2(inRect.center.x, inRect.y + 28f), Style.Gold, 60, 300f);
+            }
+            float t = Style.Now - openedAt;
+            var tone = won ? Style.Gold : new Color(0.92f, 0.38f, 0.32f);
+            var panel = inRect.ExpandedBy(Margin - 6f);
+            Style.Tex(panel.ExpandedBy(16f), Style.SoftGlow, new Color(tone.r, tone.g, tone.b, 0.18f));
+            Style.Tex(panel, Style.CardBody, Color.white);
+            Style.Border(panel, new Color(tone.r, tone.g, tone.b, 0.7f), 1f);
+            Style.Box(new Rect(panel.x, panel.y, panel.width, 3f), tone);
+
+            // Title scales in with a glow behind it.
+            float s = Style.EaseOutBack(t / 0.6f);
+            var titleRect = new Rect(inRect.x, inRect.y, inRect.width, 44f);
+            Style.GlowAround(new Rect(inRect.center.x - 150f, titleRect.y + 4f, 300f, 36f), new Color(tone.r, tone.g, tone.b, 0.3f * Mathf.Clamp01(s) + 0.08f * Style.Pulse(2f)), 1.7f, Style.SoftGlow);
+            var m = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(new Vector2(Mathf.Max(0.01f, s), Mathf.Max(0.01f, s)) * 1.25f, titleRect.center);
             Text.Font = GameFont.Medium;
-            Text.Anchor = TextAnchor.UpperCenter;
-            GUI.color = won ? new Color(0.55f, 0.9f, 0.45f) : new Color(0.95f, 0.45f, 0.4f);
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 36f), won ? "Victory" : "Run over");
-            GUI.color = Color.white;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            Style.ShadowLabel(titleRect, won ? "Victory" : "Run over", tone);
+            GUI.matrix = m;
             Text.Font = GameFont.Small;
-            Widgets.Label(new Rect(inRect.x, inRect.y + 40f, inRect.width, 50f), reason);
+            Text.Anchor = TextAnchor.UpperCenter;
+            GUI.color = new Color(1f, 1f, 1f, Style.EaseOutCubic((t - 0.3f) / 0.4f));
+            Widgets.Label(new Rect(inRect.x, inRect.y + 48f, inRect.width, 46f), reason);
+            GUI.color = Color.white;
+            float rule = Style.EaseOutCubic((t - 0.4f) / 0.5f);
+            Style.Box(new Rect(inRect.center.x - 200f * rule, inRect.y + 94f, 400f * rule, 1f), new Color(tone.r, tone.g, tone.b, 0.6f));
             Text.Anchor = TextAnchor.UpperLeft;
 
+            // Stats appear one after another; the points count up.
+            int earned = run?.pointsEarned ?? 0;
+            int shown = Mathf.RoundToInt(earned * Style.EaseOutCubic((t - 1.3f) / 1.2f));
             var lines = new List<string>
             {
                 $"Reached act {run?.act ?? 1} of {WorldComponent_RoguelikeRun.ActsPerRun}" + (run != null && run.ascension > 0 ? $" at Ascension {run.ascension}" : ""),
-                $"Nodes cleared this act: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
+                $"Nodes cleared: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
                 $"Squad: {PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count()} alive",
                 $"Relics: {(run == null || run.relics.Count == 0 ? "none" : string.Join(", ", run.relics.Select(r => r.label)))}",
                 $"Blueprints: {(run == null || run.blueprints.Count == 0 ? "none" : string.Join(", ", run.blueprints.Select(b => b.label)))}",
-                $"Meta points earned this run: {run?.pointsEarned ?? 0} (you now have {MetaProgress.S.points})",
+                $"Meta points earned this run: {shown} (you now have {MetaProgress.S.points - earned + shown})",
             };
-            Widgets.Label(new Rect(inRect.x + 20f, inRect.y + 100f, inRect.width - 40f, 240f), string.Join("\n\n", lines));
+            float ly = inRect.y + 108f;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                float a = Style.EaseOutCubic((t - 0.6f - i * 0.12f) / 0.35f);
+                if (a <= 0f) break;
+                float h = Text.CalcHeight(lines[i], inRect.width - 60f);
+                var lr = new Rect(inRect.x + 40f - (1f - a) * 24f, ly, inRect.width - 60f, h);
+                Style.Tex(new Rect(inRect.x + 22f, ly + h / 2f - 4f, 8f, 8f), Style.Glow, new Color(tone.r, tone.g, tone.b, a));
+                GUI.color = new Color(1f, 1f, 1f, a);
+                Widgets.Label(lr, lines[i]);
+                GUI.color = Color.white;
+                ly += h + 12f;
+            }
+            Style.UpdateAndDraw(particles);
 
             float y = inRect.yMax - 40f, w = (inRect.width - 30f) / 4f;
-            if (Widgets.ButtonText(new Rect(inRect.x, y, w, 38f), "Spend points")) Find.WindowStack.Add(new Dialog_Unlocks());
-            if (Widgets.ButtonText(new Rect(inRect.x + (w + 10f), y, w, 38f), "New run")) NewRun.Start();
-            if (Widgets.ButtonText(new Rect(inRect.x + 2 * (w + 10f), y, w, 38f), "Main menu")) GenScene.GoToMainMenu();
-            if (Widgets.ButtonText(new Rect(inRect.x + 3 * (w + 10f), y, w, 38f), "Keep playing")) Close();
+            if (Style.Button(new Rect(inRect.x, y, w, 38f), "Spend points", Style.Gold)) Find.WindowStack.Add(new Dialog_Unlocks());
+            if (Style.Button(new Rect(inRect.x + (w + 10f), y, w, 38f), "New run", tone)) NewRun.Start();
+            if (Style.Button(new Rect(inRect.x + 2 * (w + 10f), y, w, 38f), "Main menu", Style.Parchment)) GenScene.GoToMainMenu();
+            if (Style.Button(new Rect(inRect.x + 3 * (w + 10f), y, w, 38f), "Keep playing", Style.Parchment)) Close();
         }
     }
 }

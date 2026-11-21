@@ -24,7 +24,7 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
    - **Elite:** storm a hostile faction base; the reward is a choice of relics. Bosses are bigger bases with reinforcements.
    - **Event, rest site, treasure, merchant:** resolved on the world map, no map. Rest sites heal, train or treat; treasure gives relics; merchants sell cards for the silver your caravan carries.
 5. The modifier (cold, heat, toxic buildup, a psychic drone, meteors, tornadoes, a hurricane or a tidal surge on the coast) holds off for a grace period, then worsens every day with no cap: slower while you're ahead of pace, faster while behind.
-6. Clearing a node opens the reward screen: pick 1 card (relic, gear, implant, blueprint or recruit) or skip. Relics come in common, uncommon and rare. Recruit nodes offer only recruits. Un-drafted blueprint groups are hidden from the build menu.
+6. Clearing a node opens the reward screen: pick 1 card (relic, gear, implant, blueprint, research or recruit) or skip. Research cards finish a project right away, favouring ones that open gated objectives. Relics come in common, uncommon and rare. Recruit nodes offer only recruits. Un-drafted blueprint groups are hidden from the build menu.
 7. Then pick your next node from the cards (one per connected node), and pack what the squad and pack animals can carry (the carry limit is enforced). The squad goes straight into the chosen node, no travel. Choosing a node skips its siblings. Closed the cards by accident? Use **Leave node now** on the completion letter.
 8. Beating an act boss gives a card and lays out the next, harder act nearby. The run is won on the act-3 boss and lost on a squad wipe, a failed escort, or leaving a node early. The end-of-run screen shows stats and points, with **New run** to start again on the same world.
 
@@ -54,7 +54,7 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 | `win` | Act graph, travel, rewards after each node, map-less nodes on the path, all three acts and their bosses, winning |
 | `leave` | Leaving a node early ends the run |
 | `wipe` | Losing the squad ends the run |
-| `rewards` | Card screen, every reward kind, relic effects, blueprint build-menu gate |
+| `rewards` | Card screen (incl. a mid-pick screenshot), every reward kind incl. research, relic effects, blueprint build-menu gate |
 | `variety` | Every node kind, objective and weather modifier, and every event |
 | `meta` | Points, buying unlocks, locked content, end-of-run and unlock screens |
 | `meta` (also) | Ascension effects and unlocking |
@@ -65,7 +65,6 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 
 ## Known gaps
 
-- Objectives aren't checked against what the map, season or squad skills can supply (e.g. healroot needs Plants 8).
-- Blueprint- and research-gated objectives from the pacing research (21–40) aren't implemented yet.
-- Card art is vanilla item icons; node icons are simple generated glyphs.
+- Only 6 of the 20 gated objective candidates from the pacing research are in.
+- Card art is vanilla item icons on procedural card frames; node icons are simple generated glyphs.
 - Several DLC signature relics are simplified versions of the design (see the design doc).
