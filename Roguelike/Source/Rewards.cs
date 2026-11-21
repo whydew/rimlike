@@ -112,7 +112,7 @@ namespace Roguelike
 
         public static List<RewardCard> Generate(WorldComponent_RoguelikeRun run, RunRewardKind nodeReward)
         {
-            int count = 3 + run.relics.Sum(r => r.extraRewardChoices) + MetaProgress.ExtraRewardChoices;
+            int count = Mathf.Max(2, 3 + run.relics.Sum(r => r.extraRewardChoices) + MetaProgress.ExtraRewardChoices + run.RewardChoiceOffset);
             var cards = new List<RewardCard>();
             for (int i = 0; i < count; i++)
             {

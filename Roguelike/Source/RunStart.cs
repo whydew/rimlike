@@ -63,6 +63,7 @@ namespace Roguelike
                 Log.Warning("[Roguelike] No starting node found at the landing tile; this run has no node objective.");
                 return;
             }
+            run.ascension = MetaProgress.SelectedAscension;
             run.AddRelic(starterRelic);
             // Power unlocks that hand out starting supplies.
             foreach (var t in MetaProgress.StartThings)

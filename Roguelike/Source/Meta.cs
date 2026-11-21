@@ -33,6 +33,9 @@ namespace Roguelike
         public int runs;
         public int wins;
         public List<string> unlocked = new List<string>();
+        /// <summary>Highest Ascension level unlocked (win at your highest level to unlock the next) and the one chosen for new runs.</summary>
+        public int maxAscension;
+        public int selectedAscension;
 
         public override void ExposeData()
         {
@@ -40,6 +43,8 @@ namespace Roguelike
             Scribe_Values.Look(ref runs, "runs");
             Scribe_Values.Look(ref wins, "wins");
             Scribe_Collections.Look(ref unlocked, "unlocked", LookMode.Value);
+            Scribe_Values.Look(ref maxAscension, "maxAscension");
+            Scribe_Values.Look(ref selectedAscension, "selectedAscension");
             unlocked ??= new List<string>();
         }
     }
@@ -100,10 +105,25 @@ namespace Roguelike
             return true;
         }
 
-        public static void RecordRunEnd(bool won)
+        public const int MaxAscension = 5;
+
+        public static readonly string[] AscensionEffects =
+        {
+            "No handicaps.",
+            "Weather worsens 25% faster.",
+            "Raids are 30% stronger.",
+            "One fewer card at every reward screen.",
+            "Weather holds off one day less.",
+            "Bosses are 50% stronger.",
+        };
+
+        public static int SelectedAscension => Mathf.Clamp(S.selectedAscension, 0, S.maxAscension);
+
+        public static void RecordRunEnd(bool won, int ascension = 0)
         {
             S.runs++;
             if (won) S.wins++;
+            if (won && ascension >= S.maxAscension && S.maxAscension < MaxAscension) S.maxAscension = ascension + 1;
             Save();
         }
 
@@ -118,6 +138,7 @@ namespace Roguelike
             S.points = 0;
             S.runs = S.wins = 0;
             S.unlocked.Clear();
+            S.maxAscension = S.selectedAscension = 0;
             ScenarioLister.MarkDirty();
         }
     }
@@ -151,6 +172,18 @@ namespace Roguelike
             GUI.color = new Color(1f, 1f, 1f, 0.7f);
             Widgets.Label(new Rect(rect.x, rect.y + 34f, rect.width, 24f), $"Runs: {s.runs}, wins: {s.wins}. Earn points by clearing nodes (+1), beating the boss (+5) and skipping rewards (+1).");
             GUI.color = Color.white;
+
+            // Ascension picker for new runs; each level stacks one more handicap.
+            int asc = MetaProgress.SelectedAscension;
+            var ascRect = new Rect(rect.xMax - 300f, rect.y, 300f, 30f);
+            if (s.maxAscension > 0)
+            {
+                if (asc > 0 && Widgets.ButtonText(new Rect(ascRect.x, ascRect.y, 30f, 30f), "-")) s.selectedAscension = asc - 1;
+                Widgets.Label(new Rect(ascRect.x + 36f, ascRect.y + 4f, 200f, 26f), $"Ascension {asc} of {s.maxAscension}");
+                if (asc < s.maxAscension && Widgets.ButtonText(new Rect(ascRect.x + 240f, ascRect.y, 30f, 30f), "+")) s.selectedAscension = asc + 1;
+                TooltipHandler.TipRegion(ascRect, string.Join("\n", Enumerable.Range(1, MetaProgress.MaxAscension).Select(l => $"{l}: {MetaProgress.AscensionEffects[l]}")) +
+                                                  "\n\nLevels stack. Win at your highest level to unlock the next.");
+            }
 
             var defs = DefDatabase<UnlockDef>.AllDefs.OrderBy(u => u.KindLabel).ThenBy(u => u.cost).ToList();
             const float rowH = 54f;
@@ -225,7 +258,8 @@ namespace Roguelike
 
             var lines = new List<string>
             {
-                $"Nodes cleared: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
+                $"Reached act {run?.act ?? 1} of {WorldComponent_RoguelikeRun.ActsPerRun}" + (run != null && run.ascension > 0 ? $" at Ascension {run.ascension}" : ""),
+                $"Nodes cleared this act: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
                 $"Squad: {PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count()} alive",
                 $"Relics: {(run == null || run.relics.Count == 0 ? "none" : string.Join(", ", run.relics.Select(r => r.label)))}",
                 $"Blueprints: {(run == null || run.blueprints.Count == 0 ? "none" : string.Join(", ", run.blueprints.Select(b => b.label)))}",

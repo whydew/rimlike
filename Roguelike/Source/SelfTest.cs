@@ -278,18 +278,33 @@ namespace Roguelike
 
             var node = start;
             Caravan caravan = null;
-            for (int step = 0; step < 10; step++)
+            for (int step = 0; step < 40; step++)
             {
+                int actBefore = run.act;
                 if (node.preset.HasMap) NodeComp(map).Complete();
-                SelfTest.Check(node.state == RunNodeState.Completed, $"node {node.id}: completed");
-                if (node.IsBoss)
+                SelfTest.Check(node.state == RunNodeState.Completed, $"act {actBefore} node {node.id}: completed");
+                if (node.IsBoss && actBefore >= WorldComponent_RoguelikeRun.ActsPerRun)
                 {
-                    SelfTest.Check(run.runWon && !run.runLost, "boss cleared: run won");
+                    SelfTest.Check(run.runWon && !run.runLost, "final boss cleared: run won");
                     break;
                 }
                 if (node.reward != RunRewardKind.None)
                     foreach (var w in PickFirstReward(node)) yield return w;
-                SelfTest.Check(node.next.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {node.next.Count} next nodes are available");
+                List<int> nextIds;
+                if (node.IsBoss)
+                {
+                    SelfTest.Check(run.act == actBefore + 1 && !run.RunOver, $"act {actBefore} boss cleared: act {run.act} begins");
+                    SelfTest.Check(run.nodes.Count == 15 && run.Row(0).All(n => n.state == RunNodeState.Available) && Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().Count() == 15,
+                        $"act {run.act}: a fresh 15-node act with open starting nodes");
+                    SelfTest.Check(run.nodes.All(n => Find.WorldGrid.ApproxDistanceInTiles(n.tile, node.tile) > 0.5f), $"act {run.act}: no node on the old boss tile");
+                    if (run.act == 2) foreach (var w in Screenshot("s5_act2", world: true)) yield return w;
+                    nextIds = run.Row(0).Select(n => n.id).ToList();
+                }
+                else
+                {
+                    SelfTest.Check(node.next.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {node.next.Count} next nodes are available");
+                    nextIds = node.next;
+                }
 
                 var locked = run.nodes.FirstOrDefault(n => n.state == RunNodeState.Locked);
                 if (locked != null)
@@ -308,14 +323,14 @@ namespace Roguelike
                 else yield return Ticks(600);
                 SelfTest.Check(!run.RunOver, $"node {node.id}: moving on after completion does not end the run");
 
-                var nextNode = run.NodeById(node.next.Last());
+                var nextNode = run.NodeById(nextIds.Last());
                 if (step == 1 && nextNode.preset.HasMap && !nextNode.IsBoss)
                 {
                     // Make sure the path crosses an event node so the arrival dialog is exercised in a real run.
                     nextNode.preset = Preset("Roguelike_Encounter");
                     nextNode.reward = RunRewardKind.None;
                 }
-                var siblings = node.next.Where(id => id != nextNode.id).ToList();
+                var siblings = nextIds.Where(id => id != nextNode.id).ToList();
                 var marker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == nextNode.id);
                 SelfTest.Check(CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted, $"next node {nextNode.id} ({nextNode.preset.kind}) accepts entry");
                 // Travel the way a player does: the "Go to" option on the node, which teleports the caravan in.
@@ -637,6 +652,21 @@ namespace Roguelike
             s.points = 1;
             SelfTest.Check(!MetaProgress.TryBuy(Unlock("Roguelike_Unlock_IceNomads")) && s.points == 1, "can't buy without enough points");
             s.points = before;
+
+            // Ascension: each level stacks a handicap; winning at the top level unlocks the next.
+            int cardsBefore = RewardUtility.Generate(run, RunRewardKind.Cards).Count;
+            float weatherBefore = run.WeatherRateFactor, graceBefore = comp.GraceDays;
+            run.ascension = 5;
+            SelfTest.Check(Math.Abs(run.WeatherRateFactor - weatherBefore * 1.25f) < 0.01f, "Ascension 1+: weather 25% faster");
+            SelfTest.Check(Math.Abs(run.RaidFactor(false) - 1.3f) < 0.01f && Math.Abs(run.RaidFactor(true) - 1.95f) < 0.01f, "Ascension 2+ and 5: raids 30% stronger, bosses 50% more");
+            SelfTest.Check(RewardUtility.Generate(run, RunRewardKind.Cards).Count == cardsBefore - 1, "Ascension 3+: one fewer reward card");
+            SelfTest.Check(Math.Abs(comp.GraceDays - Math.Max(0f, graceBefore - 1f)) < 0.01f, "Ascension 4+: grace one day shorter");
+            run.ascension = 0;
+            s.maxAscension = 0;
+            MetaProgress.RecordRunEnd(true, 0);
+            SelfTest.Check(s.maxAscension == 1, "winning at your highest Ascension unlocks the next level");
+            MetaProgress.RecordRunEnd(true, 0);
+            SelfTest.Check(s.maxAscension == 1, "winning below your highest level unlocks nothing new");
 
             // Unlock screen.
             Find.WindowStack.Add(new Dialog_Unlocks());

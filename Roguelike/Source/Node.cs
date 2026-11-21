@@ -208,7 +208,7 @@ namespace Roguelike
         private int Row => Run?.NodeAt(map.Tile)?.row ?? 0;
 
         /// <summary>Grace period including relic bonuses.</summary>
-        public float GraceDays => preset.graceDays + (Run?.GraceDaysOffset ?? 0f);
+        public float GraceDays => Mathf.Max(0f, preset.graceDays + (Run?.GraceDaysOffset ?? 0f));
 
         public bool InGrace => Days < GraceDays;
 
@@ -348,7 +348,7 @@ namespace Roguelike
 
         private float RaidPoints(float factor) =>
             // Early-game storyteller points are tiny; keep a floor so a fight is a fight.
-            Mathf.Max(MinRaidPoints, StorytellerUtility.DefaultThreatPointsNow(map)) * preset.threatScale * factor * (1f + 0.2f * Row);
+            Mathf.Max(MinRaidPoints, StorytellerUtility.DefaultThreatPointsNow(map)) * preset.threatScale * factor * (1f + 0.2f * Row) * (Run?.RaidFactor(preset.isBoss) ?? 1f);
 
         private const float MinRaidPoints = 120f;
 

@@ -34,8 +34,8 @@ namespace Roguelike
         public string RewardText => reward switch
         {
             RunRewardKind.Recruits => "Reward: choose 1 of 3 recruits.",
-            RunRewardKind.Cards => "Reward: choose 1 of 3 cards (relic, gear, implant or blueprint).",
-            _ => "Reward: clears the act.",
+            RunRewardKind.Cards => IsBoss ? "Reward: choose a card, then the next act begins." : "Reward: choose 1 of 3 cards (relic, gear, implant or blueprint).",
+            _ => IsBoss ? "Reward: wins the run." : "Reward: none (events resolve on the spot).",
         };
 
         public void ExposeData()
@@ -76,13 +76,24 @@ namespace Roguelike
         public int pendingRewardNodeId = -1;
         /// <summary>Meta points earned during this run (shown on the end-of-run screen).</summary>
         public int pointsEarned;
+        /// <summary>Current act, 1..ActsPerRun. Beating the last act's boss wins the run.</summary>
+        public int act = 1;
+        /// <summary>Ascension level chosen for this run (0 = none).</summary>
+        public int ascension;
+
+        public const int ActsPerRun = 3;
 
         public bool RunOver => runWon || runLost;
 
         // ---------- Relics and blueprints ----------
 
-        public float GraceDaysOffset => relics.Sum(r => r.graceDaysOffset) + MetaProgress.GraceDaysOffset;
-        public float WeatherRateFactor => relics.Aggregate(1f, (f, r) => f * r.weatherRateFactor);
+        public float GraceDaysOffset => relics.Sum(r => r.graceDaysOffset) + MetaProgress.GraceDaysOffset - (ascension >= 4 ? 1f : 0f);
+        /// <summary>Weather speed: relics, later acts (+25% each) and Ascension 1+ (+25%).</summary>
+        public float WeatherRateFactor => relics.Aggregate(1f, (f, r) => f * r.weatherRateFactor) * (1f + 0.25f * (act - 1)) * (ascension >= 1 ? 1.25f : 1f);
+        /// <summary>Raid strength: later acts (+40% each), Ascension 2+ (+30%) and, for bosses, Ascension 5 (+50%).</summary>
+        public float RaidFactor(bool boss) => (1f + 0.4f * (act - 1)) * (ascension >= 2 ? 1.3f : 1f) * (boss && ascension >= 5 ? 1.5f : 1f);
+        /// <summary>Ascension 3+: one fewer reward card.</summary>
+        public int RewardChoiceOffset => ascension >= 3 ? -1 : 0;
         public float MaxPaceFactorFactor => relics.Aggregate(1f, (f, r) => f * r.maxPaceFactorFactor);
 
         public bool IsBuildingLocked(BuildableDef def) =>
@@ -121,6 +132,7 @@ namespace Roguelike
                     MetaProgress.Award(1);
                 }
                 pendingRewardNodeId = -1;
+                if (node.IsBoss) AdvanceAct(node.tile);
             }));
         }
 
@@ -203,25 +215,53 @@ namespace Roguelike
             int points = node.IsBoss ? 5 : 1;
             pointsEarned += points;
             MetaProgress.Award(points);
-            if (node.IsBoss)
+            if (node.IsBoss && act >= ActsPerRun)
             {
                 runWon = true;
-                MetaProgress.RecordRunEnd(true);
-                Find.WindowStack.Add(new Dialog_RunEnd(true, "You beat the boss and cleared the act."));
+                MetaProgress.RecordRunEnd(true, ascension);
+                Find.WindowStack.Add(new Dialog_RunEnd(true, $"You beat the final boss and cleared all {ActsPerRun} acts."));
+                return;
+            }
+            if (node.IsBoss)
+            {
+                // Act boss: a reward, then the next act (see OfferReward).
+                OfferReward(node, Current.Game.FindMap(tile));
                 return;
             }
             foreach (int id in node.next) NodeById(id).state = RunNodeState.Available;
             OfferReward(node, Current.Game.FindMap(tile));
         }
 
+        /// <summary>After an act boss and its reward: lay out the next act near where the boss fell.</summary>
+        private void AdvanceAct(PlanetTile bossTile)
+        {
+            act++;
+            if (!GenerateAct(bossTile))
+            {
+                Log.Error("[Roguelike] Couldn't lay out the next act; ending the run as won.");
+                runWon = true;
+                MetaProgress.RecordRunEnd(true, ascension);
+                Find.WindowStack.Add(new Dialog_RunEnd(true, "You beat the boss, but no room was left on this world for another act."));
+                return;
+            }
+            Find.LetterStack.ReceiveLetter($"Act {act} of {ActsPerRun}",
+                "The boss is beaten and a new act lies ahead, harder than the last.\n\nLeave the boss map, then select your caravan and right-click one of the new act's starting nodes, then Go to.",
+                LetterDefOf.PositiveEvent);
+        }
+
         // ---------- Generation ----------
 
         /// <summary>Builds the act graph on this world and places a marker on every node. Call after world generation.</summary>
-        public bool GenerateAct()
+        public bool GenerateAct() => GenerateAct(PlanetTile.Invalid);
+
+        /// <summary>Lays out an act; later acts start a few tiles from where the previous boss fell.</summary>
+        public bool GenerateAct(PlanetTile near)
         {
             for (int attempt = 0; attempt < 20; attempt++)
             {
-                var start = TileFinder.RandomStartingTile();
+                PlanetTile start;
+                if (!near.Valid) start = TileFinder.RandomStartingTile();
+                else if (!TileFinder.TryFindPassableTileWithTraversalDistance(near, 4, 12, out start, t => TileFinder.IsValidTileForNewSettlement(t))) continue;
                 if (!start.Valid) continue;
                 int span = Mathf.RoundToInt(RowSpacingTiles * (RowSizes.Length - 1));
                 if (!TileFinder.TryFindPassableTileWithTraversalDistance(start, Mathf.RoundToInt(span * 0.9f), Mathf.RoundToInt(span * 1.2f), out var boss,
@@ -230,6 +270,7 @@ namespace Roguelike
                 var laidOut = TryLayout(start, boss);
                 if (laidOut == null) continue;
 
+                foreach (var old in Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().ToList()) old.Destroy();
                 nodes = laidOut;
                 ConnectRows();
                 AssignPresets();
@@ -367,7 +408,8 @@ namespace Roguelike
                 var options = fitting.Count > 0 ? fitting : pool;
                 n.preset = options.RandomElementByWeight(p => p.weight);
                 // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
-                n.reward = n.IsBoss || n.preset.kind == NodeKind.Event ? RunRewardKind.None
+                n.reward = n.IsBoss ? (act < ActsPerRun ? RunRewardKind.Cards : RunRewardKind.None)
+                    : n.preset.kind == NodeKind.Event ? RunRewardKind.None
                     : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
             }
         }
@@ -408,6 +450,8 @@ namespace Roguelike
             Scribe_Values.Look(ref runLost, "runLost");
             Scribe_Values.Look(ref pendingRewardNodeId, "pendingRewardNodeId", -1);
             Scribe_Values.Look(ref pointsEarned, "pointsEarned");
+            Scribe_Values.Look(ref act, "act", 1);
+            Scribe_Values.Look(ref ascension, "ascension");
             Scribe_Collections.Look(ref relics, "relics", LookMode.Def);
             Scribe_Collections.Look(ref blueprints, "blueprints", LookMode.Def);
             relics ??= new List<RelicDef>();
@@ -497,7 +541,7 @@ namespace Roguelike
             var sb = new StringBuilder(base.GetInspectString());
             if (n?.preset == null) return sb.ToString();
             void Line(string s) { if (sb.Length > 0) sb.AppendLine(); sb.Append(s); }
-            Line($"Row {n.row + 1}{(n.IsBoss ? " (boss)" : "")} · {StateText(n.state)}");
+            Line($"Act {WorldComponent_RoguelikeRun.Get.act}, row {n.row + 1}{(n.IsBoss ? " (boss)" : "")} · {StateText(n.state)}");
             if (n.next.Count > 0) Line($"Leads to {n.next.Count} node{(n.next.Count == 1 ? "" : "s")}.");
             // Inspect strings must not contain blank lines.
             Line(n.RewardText);
