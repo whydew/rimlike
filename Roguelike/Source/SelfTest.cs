@@ -852,6 +852,8 @@ namespace Roguelike
             comp.AdvanceThreat(1f);
             SelfTest.Check(meteors.intensity > 0f, $"meteor storm escalates after grace ({meteors.IntensityText(meteors.intensity)})");
             var colonist = map.mapPawns.FreeColonistsSpawned.First();
+            // Drafted pawns stand still, so the test colonist stays inside the shockwave while the meteor falls.
+            colonist.drafter.Drafted = true;
             if (!CellFinder.TryFindRandomCellNear(colonist.Position, map, 9, c => c.Standable(map) && !c.Roofed(map) && c.DistanceTo(colonist.Position) >= 6f, out var target))
                 target = colonist.Position + new IntVec3(6, 0, 0);
             int impacts = Skyfaller_RoguelikeMeteor.Impacts;

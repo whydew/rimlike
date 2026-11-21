@@ -174,9 +174,15 @@ Each stage ends with a playtest gate; the next stage starts only once the gate p
 | **2. Rewards and drafting** | Card-pick screen (pick 1 of 3, basic animation); relics (~12), gear, implants, recruits; blueprint drafting limits the build menu | Do drafts make runs feel different? | ✅ Done (2026-11-21, in-game self-test) |
 | **3. Node variety** | Combat (Alerted, Unaware), Event nodes; survive, build, kill and escort (failable) objectives; toxic and psychic modifiers; boss fight | Is a full act replayable? | ✅ Done (2026-11-21, in-game self-test) |
 | **4. Starters and meta** | Crashlanded, Tribal Hunters, Ice Nomads; end-of-run screen; meta points and unlocks stored outside saves. Completes the MVP | Is a new run worth starting? | ✅ Done (2026-11-21, in-game self-test) |
-| **5. Post-MVP** | Ascension; elite, rest, merchant, treasure nodes; acts 2–3; DLC starters; custom meteors and disasters; card art and polish | | |
+| **5. Post-MVP** | Ascension; elite, rest, merchant, treasure nodes; acts 2–3; DLC starters; custom meteors and disasters; card art and polish | | ✅ Done (2026-11-21, in-game self-test) |
 
 Biggest risks: blueprint drafting (patching build and research menus), hand-animated card UI, and meta-progression storage outside saves.
+
+### Stage 5 notes
+
+- Disasters escalate on the node clock like other modifiers. Meteors use the vanilla streak and shadow as the warning, then add a crater, fires, dust, screen shake, a stunning shockwave and sometimes a quake. Tornadoes are vanilla tornadoes; the hurricane is a thunderstorm with escalating lightning; the tsunami is a tidal surge that floods the map from its coast.
+- DLC signature relics that differ from the starter table above (simplified to existing systems): Hemogen Chalice heals wounds faster; Deep Drill speeds mining (no underground weather immunity); Silver Tongue is a merchant discount plus negotiation; Go-Juice Cache is less pain and faster movement; Ember Heart and Blizzard Howl widen heat/cold comfort rather than turning weather into a buff; Gestator Core raises mech bandwidth instead of rebuilding mechs; Imperial Writ drops four Imperial troopers once per act on a combat node.
+- After a run ends, **New run** restarts on the same world (same seed) with a fresh act, and vanilla's game-over flow is suppressed.
 
 ## Open questions
 
