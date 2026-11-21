@@ -178,9 +178,9 @@ namespace Roguelike
             var ascRect = new Rect(rect.xMax - 300f, rect.y, 300f, 30f);
             if (s.maxAscension > 0)
             {
-                if (asc > 0 && Widgets.ButtonText(new Rect(ascRect.x, ascRect.y, 30f, 30f), "-")) s.selectedAscension = asc - 1;
+                if (asc > 0 && Widgets.ButtonText(new Rect(ascRect.x, ascRect.y, 30f, 30f), "-")) { s.selectedAscension = asc - 1; MetaProgress.Save(); }
                 Widgets.Label(new Rect(ascRect.x + 36f, ascRect.y + 4f, 200f, 26f), $"Ascension {asc} of {s.maxAscension}");
-                if (asc < s.maxAscension && Widgets.ButtonText(new Rect(ascRect.x + 240f, ascRect.y, 30f, 30f), "+")) s.selectedAscension = asc + 1;
+                if (asc < s.maxAscension && Widgets.ButtonText(new Rect(ascRect.x + 240f, ascRect.y, 30f, 30f), "+")) { s.selectedAscension = asc + 1; MetaProgress.Save(); }
                 TooltipHandler.TipRegion(ascRect, string.Join("\n", Enumerable.Range(1, MetaProgress.MaxAscension).Select(l => $"{l}: {MetaProgress.AscensionEffects[l]}")) +
                                                   "\n\nLevels stack. Win at your highest level to unlock the next.");
             }
