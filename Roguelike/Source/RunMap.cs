@@ -81,6 +81,10 @@ namespace Roguelike
         public int act = 1;
         /// <summary>Ascension level chosen for this run (0 = none).</summary>
         public int ascension;
+        /// <summary>Act in which the Imperial Writ was last used (once per act).</summary>
+        public int writUsedAct;
+        /// <summary>Node tile where the Bloodstained Codex last paid out (once per node).</summary>
+        public PlanetTile codexTile = PlanetTile.Invalid;
 
         public const int ActsPerRun = 3;
 
@@ -465,6 +469,8 @@ namespace Roguelike
             Scribe_Values.Look(ref pointsEarned, "pointsEarned");
             Scribe_Values.Look(ref act, "act", 1);
             Scribe_Values.Look(ref ascension, "ascension");
+            Scribe_Values.Look(ref writUsedAct, "writUsedAct");
+            Scribe_Values.Look(ref codexTile, "codexTile", PlanetTile.Invalid);
             Scribe_Collections.Look(ref relics, "relics", LookMode.Def);
             Scribe_Collections.Look(ref blueprints, "blueprints", LookMode.Def);
             relics ??= new List<RelicDef>();

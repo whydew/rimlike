@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using RimWorld;
 using RimWorld.Planet;
+using UnityEngine;
 using Verse;
 
 namespace Roguelike
@@ -130,7 +131,9 @@ namespace Roguelike
     /// <summary>Merchant nodes: buy reward cards with the silver the caravan is carrying.</summary>
     public static class ShopUtility
     {
-        public static int Price(RewardCard c) => c.kind switch
+        public static int Price(RewardCard c) => Mathf.RoundToInt(BasePrice(c) * (1f - Mathf.Clamp01(WorldComponent_RoguelikeRun.Get?.relics.Sum(r => r.shopDiscount) ?? 0f)));
+
+        private static int BasePrice(RewardCard c) => c.kind switch
         {
             RewardKind.Relic => 250,
             RewardKind.Blueprint => 150,

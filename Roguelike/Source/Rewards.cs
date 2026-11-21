@@ -5,6 +5,7 @@ using RimWorld;
 using RimWorld.Planet;
 using UnityEngine;
 using Verse;
+using Verse.AI.Group;
 
 namespace Roguelike
 {
@@ -23,6 +24,14 @@ namespace Roguelike
         public float packAnimalCapacityFactor = 1f;
         public bool healAnimalsOnEnter;
         public bool fixWorstConditionOnEnter;
+        /// <summary>Merchant prices are reduced by this fraction.</summary>
+        public float shopDiscount;
+        // DLC starter relics.
+        public bool grantPsylink;          // Royalty: one colonist starts with a psylink.
+        public bool psyfocusOnEnter;       // Royalty: psyfocus refills at the start of each node.
+        public bool nobleTitle;            // Royalty: one colonist starts as an Imperial knight.
+        public bool imperialWrit;          // Royalty: Imperial troopers drop in to help once per act on a combat node.
+        public bool voidCodex;             // Anomaly: killing an entity grants a relic (once per node); creepy events at node start.
     }
 
     /// <summary>A gear or implant item reward.</summary>
@@ -222,13 +231,36 @@ namespace Roguelike
         }
     }
 
-    /// <summary>Applies relic effects that happen at node start.</summary>
+    /// <summary>Applies relic effects that happen at run start and node start.</summary>
     public static class RelicEffects
     {
+        /// <summary>One-time starter effects, right after landing.</summary>
+        public static void OnRunStart(Map map)
+        {
+            var run = WorldComponent_RoguelikeRun.Get;
+            var first = map.mapPawns.FreeColonists.FirstOrDefault(p => p.RaceProps.Humanlike);
+            if (run == null || first == null) return;
+            if (ModsConfig.RoyaltyActive && run.relics.Any(r => r.grantPsylink) && !first.HasPsylink) first.ChangePsylinkLevel(1, sendLetter: false);
+            if (ModsConfig.RoyaltyActive && run.relics.Any(r => r.nobleTitle) && Faction.OfEmpire != null && first.royalty != null)
+            {
+                var knight = DefDatabase<RoyalTitleDef>.GetNamedSilentFail("Knight");
+                if (knight != null) first.royalty.SetTitle(Faction.OfEmpire, knight, grantRewards: false, sendLetter: false);
+            }
+        }
+
         public static void OnNodeStart(Map map)
         {
             var run = WorldComponent_RoguelikeRun.Get;
             if (run is not { active: true }) return;
+            if (ModsConfig.RoyaltyActive && run.relics.Any(r => r.psyfocusOnEnter))
+                foreach (var p in map.mapPawns.FreeColonistsSpawned.Where(p => p.HasPsylink)) p.psychicEntropy?.OffsetPsyfocusDirectly(1f);
+            var comp = map.GetComponent<MapComponent_RoguelikeNode>();
+            if (ModsConfig.RoyaltyActive && run.relics.Any(r => r.imperialWrit) && run.writUsedAct < run.act && comp?.preset?.objective == ObjectiveKind.KillAll)
+            {
+                run.writUsedAct = run.act;
+                SendImperialTroopers(map);
+            }
+            if (ModsConfig.AnomalyActive && run.relics.Any(r => r.voidCodex) && Rand.Chance(0.25f)) TryCreepyEvent(map);
             if (run.relics.Any(r => r.healAnimalsOnEnter))
                 foreach (var animal in map.mapPawns.SpawnedColonyAnimals)
                     HealthUtility.HealNonPermanentInjuriesAndRestoreLegs(animal);
@@ -243,6 +275,34 @@ namespace Roguelike
                 }
             }
             run.ApplyRelicHediffs();
+        }
+
+        /// <summary>Imperial Writ: four Imperial troopers drop in near the squad and fight alongside it.</summary>
+        public static void SendImperialTroopers(Map map)
+        {
+            var empire = Faction.OfEmpire;
+            var kind = DefDatabase<PawnKindDef>.GetNamedSilentFail("Empire_Fighter_Trooper");
+            if (empire == null || kind == null || empire.HostileTo(Faction.OfPlayer)) return;
+            var near = map.mapPawns.FreeColonistsSpawned.FirstOrDefault()?.Position ?? map.Center;
+            var troopers = new List<Pawn>();
+            for (int i = 0; i < 4; i++) troopers.Add(PawnGenerator.GeneratePawn(new PawnGenerationRequest(kind, empire, mustBeCapableOfViolence: true)));
+            DropPodUtility.DropThingsNear(near, map, troopers.Cast<Thing>(), forbid: false);
+            LordMaker.MakeNewLord(empire, new LordJob_AssistColony(empire, near), map, troopers);
+            Messages.Message("Imperial Writ: troopers are dropping in to help.", new TargetInfo(near, map), MessageTypeDefOf.PositiveEvent);
+        }
+
+        /// <summary>Bloodstained Codex: a random Anomaly threat that can fire on this map.</summary>
+        public static bool TryCreepyEvent(Map map)
+        {
+            var options = DefDatabase<IncidentDef>.AllDefs.Where(d => d.modContentPack?.PackageId == "ludeon.rimworld.anomaly"
+                && (d.category == IncidentCategoryDefOf.ThreatSmall || d.category == IncidentCategoryDefOf.ThreatBig) && d.TargetAllowed(map)).ToList();
+            foreach (var def in options.InRandomOrder())
+            {
+                var parms = StorytellerUtility.DefaultParmsNow(def.category, map);
+                parms.forced = true;
+                if (def.Worker.CanFireNow(parms) && def.Worker.TryExecute(parms)) return true;
+            }
+            return false;
         }
 
         public static void EnsureHediff(Pawn pawn, HediffDef def)

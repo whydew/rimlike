@@ -48,6 +48,19 @@ namespace Roguelike
         public override void Notify_PawnDied(Corpse corpse)
         {
             var pawn = corpse?.InnerPawn;
+            var run = WorldComponent_RoguelikeRun.Get;
+            // Bloodstained Codex: an entity killed on the current node grants a relic, once per node.
+            if (pawn != null && ModsConfig.AnomalyActive && pawn.RaceProps.IsAnomalyEntity && run is { active: true, RunOver: false } && run.relics.Any(r => r.voidCodex)
+                && corpse.MapHeld != null && run.CurrentNode?.tile == corpse.MapHeld.Tile && run.codexTile != corpse.MapHeld.Tile)
+            {
+                var relic = RewardUtility.RelicPool(run).RandomElementWithFallback();
+                if (relic != null)
+                {
+                    run.codexTile = corpse.MapHeld.Tile;
+                    run.AddRelic(relic);
+                    Messages.Message($"Bloodstained Codex: the entity's death yields {relic.LabelCap}.", MessageTypeDefOf.PositiveEvent);
+                }
+            }
             if (pawn == null || pawn.Faction != Faction.OfPlayer || !pawn.RaceProps.Humanlike) return;
             if (!PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Any())
                 WorldComponent_RoguelikeRun.Get?.Lose("Your whole squad is gone.");
@@ -77,6 +90,7 @@ namespace Roguelike
                     GenPlace.TryPlaceThing(thing, MapGenerator.PlayerStartSpot.IsValid ? MapGenerator.PlayerStartSpot : map.Center, map, ThingPlaceMode.Near);
                 }
             }
+            RelicEffects.OnRunStart(map);
             NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map));
         }
     }

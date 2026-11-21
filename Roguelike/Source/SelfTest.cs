@@ -730,6 +730,9 @@ namespace Roguelike
         {
             yield return () => Current.ProgramState == ProgramState.Playing && Find.CurrentMap != null;
             yield return Frames(120);
+            // Let drop pods open and the run's periodic upkeep (relic effects) run once.
+            yield return Ticks(900);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
             var run = Run;
             var part = Find.Scenario.AllParts.OfType<ScenPart_RoguelikeRun>().First();
             var map = Find.CurrentMap;
@@ -750,8 +753,31 @@ namespace Roguelike
                     SelfTest.Check(parkas >= 3, $"Ice Nomads: three parkas ({parkas})");
                     SelfTest.Check(Math.Abs(run.WeatherRateFactor - 0.7f) < 0.01f, "Thermal Lining: weather worsens 30% slower");
                     break;
-                default:
+                case "crashlanded":
                     SelfTest.Check(run.relics.Any(r => r.extraRewardChoices > 0), "Crashlanded: Black Box adds a reward choice");
+                    break;
+                case "PsycasterExile":
+                    SelfTest.Check(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Any(p => p.HasPsylink), "Psycaster Exile: a colonist has a psylink");
+                    break;
+                case "ImperialNoble":
+                    SelfTest.Check(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Any(p => p.royalty != null && p.royalty.AllTitlesForReading.Count > 0), "Imperial Noble: a colonist holds an Imperial title");
+                    break;
+                case "MechTender":
+                    SelfTest.Check(map.mapPawns.AllPawnsSpawned.Count(p => p.RaceProps.IsMechanoid && p.Faction == Faction.OfPlayer) >= 2, "Mech-tender: two player mechs");
+                    SelfTest.Check(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Any(p => p.health.hediffSet.HasHediff(part.starterRelic.hediff)), "Mech-tender: Gestator Core effect applied");
+                    break;
+                case "VoidCultists":
+                    SelfTest.Check(RelicEffects.TryCreepyEvent(map), "Void Cultists: the codex can stir up an Anomaly threat");
+                    break;
+                default:
+                    var xenoPart = Find.Scenario.AllParts.FirstOrDefault(p => p.GetType().Name == "ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes");
+                    var counts = xenoPart == null ? null : AccessTools.Field(xenoPart.GetType(), "xenotypeCounts").GetValue(xenoPart) as System.Collections.IEnumerable;
+                    var first = counts?.Cast<object>().FirstOrDefault();
+                    var xeno = first == null ? null : AccessTools.Field(first.GetType(), "xenotype").GetValue(first) as XenotypeDef;
+                    int matching = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count(p => p.genes?.Xenotype == xeno);
+                    SelfTest.Check(xeno != null && matching >= 2, $"{part.starterId}: colonists are {xeno?.label} ({matching})");
+                    if (part.starterRelic.hediff != null)
+                        SelfTest.Check(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.All(p => p.health.hediffSet.HasHediff(part.starterRelic.hediff)), $"{part.starterId}: relic effect on every colonist");
                     break;
             }
             Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);

@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Starter content for the DLCs (generated). Every def has MayRequire, so it only loads with its DLC. -->
+
+  <ScenarioDef Name="Roguelike_XenoStarterBase" ParentName="ScenarioBase" Abstract="True">
+    <scenario><parts>
+      <li Class="ScenPart_PlayerPawnsArriveMethod"><def>PlayerPawnsArriveMethod</def><visible>false</visible><method>DropPods</method></li>
+      <li Class="ScenPart_StartingThing_Defined"><def>StartingThing_Defined</def><thingDef>Silver</thingDef><count>400</count></li>
+      <li Class="ScenPart_StartingThing_Defined"><def>StartingThing_Defined</def><thingDef>MealSurvivalPack</thingDef><count>30</count></li>
+      <li Class="ScenPart_StartingThing_Defined"><def>StartingThing_Defined</def><thingDef>MedicineIndustrial</thingDef><count>15</count></li>
+      <li Class="ScenPart_StartingThing_Defined"><def>StartingThing_Defined</def><thingDef>Gun_BoltActionRifle</thingDef></li>
+      <li Class="ScenPart_StartingThing_Defined"><def>StartingThing_Defined</def><thingDef>Gun_Revolver</thingDef></li>
+    </parts></scenario>
+  </ScenarioDef>
+
+  <!-- Vampire Coven (Sanguophage) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_VampireCoven</defName><label>Roguelike: Vampire Coven</label><description>Two sanguophages and their human companion. Signature relic: Hemogen Chalice. Wounds close twice as fast.</description>
+    <scenario><summary>Two sanguophages and their human companion.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><overrideKinds><li><xenotype>Sanguophage</xenotype><pawnKind>Sanguophage_Player</pawnKind></li></overrideKinds><xenotypeCounts><li><xenotype>Sanguophage</xenotype><count>2</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li><li><xenotype>Baseliner</xenotype><count>1</count></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>VampireCoven</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_VampireCoven</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_VampireCoven</defName><label>Hemogen Chalice</label><description>Wounds close twice as fast.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_HemogenChalice</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_VampireCoven</defName><label>Vampire Coven starter</label><description>Two sanguophages and their human companion. Relic: Hemogen Chalice.</description><cost>6</cost><starterId>VampireCoven</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Burrowers (Dirtmole) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Burrowers</defName><label>Roguelike: Burrowers</label><description>Three dirtmole tunnelers. Signature relic: Deep Drill. Colonists mine 60% faster.</description>
+    <scenario><summary>Three dirtmole tunnelers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Dirtmole</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>Burrowers</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_Burrowers</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_Burrowers</defName><label>Deep Drill</label><description>Colonists mine 60% faster.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_DeepDrill</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_Burrowers</defName><label>Burrowers starter</label><description>Three dirtmole tunnelers. Relic: Deep Drill.</description><cost>6</cost><starterId>Burrowers</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Think Tank (Genie) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_ThinkTank</defName><label>Roguelike: Think Tank</label><description>Three genie researchers. Signature relic: Research Grant. One extra choice at every reward screen.</description>
+    <scenario><summary>Three genie researchers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Genie</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>ThinkTank</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_ThinkTank</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_ThinkTank</defName><label>Research Grant</label><description>One extra choice at every reward screen.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><extraRewardChoices>1</extraRewardChoices>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_ThinkTank</defName><label>Think Tank starter</label><description>Three genie researchers. Relic: Research Grant.</description><cost>6</cost><starterId>ThinkTank</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Envoys (Highmate) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Envoys</defName><label>Roguelike: Envoys</label><description>Three highmate envoys. Signature relic: Silver Tongue. Merchants charge 25% less and colonists negotiate better.</description>
+    <scenario><summary>Three highmate envoys.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Highmate</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>Envoys</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_Envoys</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_Envoys</defName><label>Silver Tongue</label><description>Merchants charge 25% less and colonists negotiate better.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><shopDiscount>0.25</shopDiscount><hediff>Roguelike_RelicEffect_SilverTongue</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_Envoys</defName><label>Envoys starter</label><description>Three highmate envoys. Relic: Silver Tongue.</description><cost>6</cost><starterId>Envoys</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Shock Troopers (Hussar) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_ShockTroopers</defName><label>Roguelike: Shock Troopers</label><description>Three hussar soldiers. Signature relic: Go-Juice Cache. Colonists feel less pain and move faster.</description>
+    <scenario><summary>Three hussar soldiers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Hussar</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>ShockTroopers</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_ShockTroopers</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_ShockTroopers</defName><label>Go-Juice Cache</label><description>Colonists feel less pain and move faster.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_GoJuice</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_ShockTroopers</defName><label>Shock Troopers starter</label><description>Three hussar soldiers. Relic: Go-Juice Cache.</description><cost>6</cost><starterId>ShockTroopers</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Firebrands (Impid) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Firebrands</defName><label>Roguelike: Firebrands</label><description>Three impid firebrands. Signature relic: Ember Heart. Colonists are comfortable in far greater heat.</description>
+    <scenario><summary>Three impid firebrands.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Impid</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>Firebrands</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_Firebrands</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_Firebrands</defName><label>Ember Heart</label><description>Colonists are comfortable in far greater heat.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_EmberHeart</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_Firebrands</defName><label>Firebrands starter</label><description>Three impid firebrands. Relic: Ember Heart.</description><cost>6</cost><starterId>Firebrands</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Old Blood (Neanderthal) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_OldBlood</defName><label>Roguelike: Old Blood</label><description>Three neanderthal brawlers. Signature relic: Thick Skull. Colonists take 20% less damage.</description>
+    <scenario><summary>Three neanderthal brawlers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Neanderthal</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>OldBlood</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_OldBlood</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_OldBlood</defName><label>Thick Skull</label><description>Colonists take 20% less damage.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_ThickSkull</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_OldBlood</defName><label>Old Blood starter</label><description>Three neanderthal brawlers. Relic: Thick Skull.</description><cost>6</cost><starterId>OldBlood</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Hog Riders (Pigskin) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_HogRiders</defName><label>Roguelike: Hog Riders</label><description>Three pigskin wanderers. Signature relic: Iron Gut. Colonists get hungry 30% slower.</description>
+    <scenario><summary>Three pigskin wanderers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Pigskin</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>HogRiders</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_HogRiders</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_HogRiders</defName><label>Iron Gut</label><description>Colonists get hungry 30% slower.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_IronGut</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_HogRiders</defName><label>Hog Riders starter</label><description>Three pigskin wanderers. Relic: Iron Gut.</description><cost>6</cost><starterId>HogRiders</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Rust Clan (Waster) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RustClan</defName><label>Roguelike: Rust Clan</label><description>Three waster scavengers. Signature relic: Toxic Lungs. Colonists shrug off toxic buildup.</description>
+    <scenario><summary>Three waster scavengers.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Waster</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>RustClan</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_RustClan</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_RustClan</defName><label>Toxic Lungs</label><description>Colonists shrug off toxic buildup.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_ToxicLungs</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_RustClan</defName><label>Rust Clan starter</label><description>Three waster scavengers. Relic: Toxic Lungs.</description><cost>6</cost><starterId>RustClan</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Frost Raiders (Yttakin) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_FrostRaiders</defName><label>Roguelike: Frost Raiders</label><description>Three yttakin raiders. Signature relic: Blizzard Howl. Colonists are comfortable in far greater cold.</description>
+    <scenario><summary>Three yttakin raiders.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes"><def>ConfigurePawnsXenotypes</def><pawnChoiceCount>8</pawnChoiceCount><xenotypeCounts><li><xenotype>Yttakin</xenotype><count>3</count><requiredAtStart>true</requiredAtStart><allowedDevelopmentalStages>Adult</allowedDevelopmentalStages></li></xenotypeCounts></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>FrostRaiders</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_FrostRaiders</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_FrostRaiders</defName><label>Blizzard Howl</label><description>Colonists are comfortable in far greater cold.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_BlizzardHowl</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_FrostRaiders</defName><label>Frost Raiders starter</label><description>Three yttakin raiders. Relic: Blizzard Howl.</description><cost>6</cost><starterId>FrostRaiders</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Mech-tender (Biotech mechanitor) -->
+  <ScenarioDef ParentName="Roguelike_XenoStarterBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_MechTender</defName><label>Roguelike: Mech-tender</label><description>A mechanitor with two mechs and a companion. Signature relic: Gestator Core. The mechanitor controls far more mechs.</description>
+    <scenario><summary>A mechanitor, a companion and two mechs.</summary><parts>
+      <li Class="ScenPart_ConfigPage_ConfigureStartingPawns_KindDefs"><def>ConfigurePawnsKindDefs</def><pawnChoiceCount>8</pawnChoiceCount><leftBehindPawnKind>Mechanitor</leftBehindPawnKind><kindCounts><li><kindDef>Mechanitor</kindDef><count>1</count><requiredAtStart>true</requiredAtStart></li><li><kindDef>Colonist</kindDef><count>1</count></li></kindCounts></li>
+      <li Class="ScenPart_StartingMech"><def>StartingMech</def><mechKind>Mech_Lifter</mechKind><overseenByPlayerPawnChance>1</overseenByPlayerPawnChance></li>
+      <li Class="ScenPart_StartingMech"><def>StartingMech</def><mechKind>Mech_Constructoid</mechKind><overseenByPlayerPawnChance>1</overseenByPlayerPawnChance></li>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>MechTender</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_MechTender</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Relic_MechTender</defName><label>Gestator Core</label><description>The mechanitor controls far more mechs.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><hediff>Roguelike_RelicEffect_GestatorCore</hediff>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_Unlock_MechTender</defName><label>Mech-tender starter</label><description>A mechanitor, a companion and two mechs. Relic: Gestator Core.</description><cost>6</cost><starterId>MechTender</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Psycaster Exile -->
+  <ScenarioDef ParentName="Crashlanded" MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_PsycasterExile</defName><label>Roguelike: Psycaster Exile</label><description>A psycaster in exile and two companions. Signature relic: Eltex Shard. One colonist starts with a psylink, and psyfocus refills at the start of each node.</description>
+    <scenario><summary>A psycaster in exile and two companions.</summary><parts>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>PsycasterExile</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_PsycasterExile</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_Relic_PsycasterExile</defName><label>Eltex Shard</label><description>One colonist starts with a psylink, and psyfocus refills at the start of each node.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><grantPsylink>true</grantPsylink><psyfocusOnEnter>true</psyfocusOnEnter>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_Unlock_PsycasterExile</defName><label>Psycaster Exile starter</label><description>A psycaster in exile and two companions. Relic: Eltex Shard.</description><cost>6</cost><starterId>PsycasterExile</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Imperial Noble -->
+  <ScenarioDef ParentName="Crashlanded" MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_ImperialNoble</defName><label>Roguelike: Imperial Noble</label><description>An Imperial knight and two retainers. Signature relic: Imperial Writ. One colonist starts as an Imperial knight; once per act, Imperial troopers drop in to help on a combat node.</description>
+    <scenario><summary>An Imperial knight and two retainers.</summary><parts>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>ImperialNoble</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_ImperialNoble</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_Relic_ImperialNoble</defName><label>Imperial Writ</label><description>One colonist starts as an Imperial knight; once per act, Imperial troopers drop in to help on a combat node.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><nobleTitle>true</nobleTitle><imperialWrit>true</imperialWrit>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Royalty">
+    <defName>Roguelike_Unlock_ImperialNoble</defName><label>Imperial Noble starter</label><description>An Imperial knight and two retainers. Relic: Imperial Writ.</description><cost>6</cost><starterId>ImperialNoble</starterId>
+  </Roguelike.UnlockDef>
+
+  <!-- Void Cultists -->
+  <ScenarioDef ParentName="Crashlanded" MayRequire="Ludeon.RimWorld.Anomaly">
+    <defName>Roguelike_VoidCultists</defName><label>Roguelike: Void Cultists</label><description>Three cultists who went looking for the void. Signature relic: Bloodstained Codex. Killing an entity on a node grants a relic (once per node), but each node may stir up something unnatural.</description>
+    <scenario><summary>Three cultists who went looking for the void.</summary><parts>
+      <li Class="Roguelike.ScenPart_RoguelikeRun"><def>Roguelike_Run</def><starterId>VoidCultists</starterId><requiresUnlock>true</requiresUnlock><starterRelic>Roguelike_Relic_VoidCultists</starterRelic></li>
+    </parts></scenario>
+  </ScenarioDef>
+  <Roguelike.RelicDef MayRequire="Ludeon.RimWorld.Anomaly">
+    <defName>Roguelike_Relic_VoidCultists</defName><label>Bloodstained Codex</label><description>Killing an entity on a node grants a relic (once per node), but each node may stir up something unnatural.</description>
+    <iconThing>Gold</iconThing><starterOnly>true</starterOnly><voidCodex>true</voidCodex>
+  </Roguelike.RelicDef>
+  <Roguelike.UnlockDef MayRequire="Ludeon.RimWorld.Anomaly">
+    <defName>Roguelike_Unlock_VoidCultists</defName><label>Void Cultists starter</label><description>Three cultists who went looking for the void. Relic: Bloodstained Codex.</description><cost>6</cost><starterId>VoidCultists</starterId>
+  </Roguelike.UnlockDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_HemogenChalice</defName><label>relic: hemogen chalice</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><InjuryHealingFactor>1</InjuryHealingFactor></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_DeepDrill</defName><label>relic: deep drill</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><MiningSpeed>0.6</MiningSpeed></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_SilverTongue</defName><label>relic: silver tongue</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><NegotiationAbility>0.4</NegotiationAbility></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_GoJuice</defName><label>relic: go-juice rush</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><painFactor>0.6</painFactor><statOffsets><MoveSpeed>0.3</MoveSpeed></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_EmberHeart</defName><label>relic: ember heart</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><ComfyTemperatureMax>25</ComfyTemperatureMax></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_ThickSkull</defName><label>relic: thick skull</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><IncomingDamageFactor>-0.2</IncomingDamageFactor></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_IronGut</defName><label>relic: iron gut</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><hungerRateFactor>0.7</hungerRateFactor></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_ToxicLungs</defName><label>relic: toxic lungs</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><ToxicResistance>1</ToxicResistance></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_BlizzardHowl</defName><label>relic: blizzard howl</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><ComfyTemperatureMin>-25</ComfyTemperatureMin></statOffsets></li></stages>
+  </HediffDef>
+  <HediffDef ParentName="Roguelike_RelicEffectBase" MayRequire="Ludeon.RimWorld.Biotech">
+    <defName>Roguelike_RelicEffect_GestatorCore</defName><label>relic: gestator core</label><description>A run relic grants this colonist an edge.</description>
+    <stages><li><statOffsets><MechBandwidth>6</MechBandwidth></statOffsets></li></stages>
+  </HediffDef>
+
+</Defs>
