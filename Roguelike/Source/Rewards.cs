@@ -67,7 +67,7 @@ namespace Roguelike
             gated ??= new HashSet<BuildableDef>(DefDatabase<BlueprintGroupDef>.AllDefs.SelectMany(g => g.buildings));
     }
 
-    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit }
+    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit, Path }
 
     /// <summary>One card on the reward screen.</summary>
     public class RewardCard
@@ -77,6 +77,8 @@ namespace Roguelike
         public GearRewardDef gear;
         public BlueprintGroupDef blueprint;
         public Pawn recruit;
+        /// <summary>For Path cards: the node this card leads to.</summary>
+        public RunNode pathNode;
 
         public string Title => kind switch
         {
@@ -84,6 +86,7 @@ namespace Roguelike
             RewardKind.Gear or RewardKind.Implant => gear.LabelCap,
             RewardKind.Blueprint => blueprint.LabelCap,
             RewardKind.Recruit => recruit.Name.ToStringFull,
+            RewardKind.Path => (pathNode.IsBoss ? "Boss: " : "") + pathNode.preset.LabelCap,
             _ => "?",
         };
 
@@ -94,6 +97,7 @@ namespace Roguelike
             RewardKind.Implant => "Implant",
             RewardKind.Blueprint => "Blueprint",
             RewardKind.Recruit => "Recruit",
+            RewardKind.Path => pathNode.IsBoss ? $"Act {pathNode.act} boss" : GenText.SplitCamelCase(pathNode.preset.kind.ToString()),
             _ => "",
         };
 
@@ -104,6 +108,7 @@ namespace Roguelike
             RewardKind.Implant => new Color(0.3f, 0.75f, 0.7f),
             RewardKind.Blueprint => new Color(0.85f, 0.5f, 0.25f),
             RewardKind.Recruit => new Color(0.45f, 0.8f, 0.4f),
+            RewardKind.Path => pathNode.IsBoss ? new Color(0.85f, 0.3f, 0.25f) : pathNode.preset.HasMap ? new Color(0.55f, 0.55f, 0.6f) : new Color(0.4f, 0.65f, 0.85f),
             _ => Color.white,
         };
     }

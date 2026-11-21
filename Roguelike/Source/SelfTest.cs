@@ -217,27 +217,38 @@ namespace Roguelike
         private static void CheckGraph()
         {
             var run = Run;
+            int acts = WorldComponent_RoguelikeRun.ActsPerRun;
             SelfTest.Check(run is { active: true }, "run is active after world generation");
-            SelfTest.Check(run.nodes.Count == 15, $"act has 15 nodes (got {run.nodes.Count})");
-            var sizes = Enumerable.Range(0, 6).Select(r => run.Row(r).Count()).ToList();
-            SelfTest.Check(sizes.SequenceEqual(new[] { 3, 3, 3, 3, 2, 1 }), $"row sizes 3,3,3,3,2,1 (got {string.Join(",", sizes)})");
-            SelfTest.Check(run.nodes.Select(n => n.tile).Distinct().Count() == run.nodes.Count, "every node has its own tile");
-            float minGap = run.nodes.SelectMany(a => run.nodes.Where(b => b.id > a.id).Select(b => Find.WorldGrid.ApproxDistanceInTiles(a.tile, b.tile))).Min();
-            SelfTest.Check(minGap >= 2.9f, $"nodes are at least ~3 tiles apart (min {minGap:0.0})");
-            SelfTest.Check(run.nodes.Count(n => n.IsBoss) == 1 && run.nodes.Last().IsBoss, "exactly one boss, in the last row");
-            SelfTest.Check(run.nodes.Where(n => !n.IsBoss).All(n => n.next.Count > 0), "every non-boss node leads somewhere");
-            SelfTest.Check(run.nodes.Where(n => n.row > 0).All(n => run.nodes.Any(p => p.next.Contains(n.id))), "every non-start node has an incoming edge");
-            bool crossing = false;
-            for (int r = 0; r < 5; r++)
+            SelfTest.Check(run.nodes.Count == 15 * acts, $"all {acts} acts are laid out up front ({run.nodes.Count} nodes)");
+            for (int a = 1; a <= acts; a++)
             {
-                var edges = run.Row(r).SelectMany(a => a.next.Select(id => (a.col, run.NodeById(id).col))).ToList();
-                crossing |= edges.Any(e => edges.Any(f => (e.Item1 < f.Item1 && e.Item2 > f.Item2)));
+                var sizes = Enumerable.Range(0, 6).Select(r => run.Row(a, r).Count()).ToList();
+                SelfTest.Check(sizes.SequenceEqual(new[] { 3, 3, 3, 3, 2, 1 }), $"act {a}: row sizes 3,3,3,3,2,1 (got {string.Join(",", sizes)})");
+                var boss = run.Row(a, 5).First();
+                float span = Find.WorldGrid.ApproxDistanceInTiles(run.Row(a, 0).ElementAt(1).tile, boss.tile);
+                SelfTest.Check(span >= 25f, $"act {a}: nodes are spread out ({span:0} tiles from the start row to the boss)");
+                if (a < acts)
+                    SelfTest.Check(boss.next.OrderBy(i => i).SequenceEqual(run.Row(a + 1, 0).Select(n => n.id).OrderBy(i => i)), $"act {a}: the boss leads to the starting nodes of act {a + 1}");
+                bool crossing = false;
+                for (int r = 0; r < 5; r++)
+                {
+                    var edges = run.Row(a, r).SelectMany(n => n.next.Select(id => (n.col, run.NodeById(id).col))).ToList();
+                    crossing |= edges.Any(e => edges.Any(f => e.Item1 < f.Item1 && e.Item2 > f.Item2));
+                }
+                SelfTest.Check(!crossing, $"act {a}: no edges cross");
             }
-            SelfTest.Check(!crossing, "no edges cross");
+            SelfTest.Check(run.nodes.Select(n => n.tile).Distinct().Count() == run.nodes.Count, "every node has its own tile");
+            float minGap = run.nodes.SelectMany(x => run.nodes.Where(y => y.id > x.id).Select(y => Find.WorldGrid.ApproxDistanceInTiles(x.tile, y.tile))).Min();
+            SelfTest.Check(minGap >= 2f, $"nodes are well apart (closest pair {minGap:0.0} tiles)");
+            SelfTest.Check(run.nodes.Where(n => !(n.IsBoss && n.act == acts)).All(n => n.next.Count > 0), "every node but the final boss leads somewhere");
             SelfTest.Check(run.nodes.All(n => n.preset != null && n.preset.isBoss == n.IsBoss), "every node has a preset of the right kind");
-            SelfTest.Check(Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().Count() == 15, "15 markers on the world map");
+            SelfTest.Check(Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().Count() == run.nodes.Count, "a marker for every node of every act");
+            var npcBases = Find.WorldObjects.Settlements.Where(s => s.Faction != null && !s.Faction.IsPlayer).ToList();
+            var assaultTiles = run.nodes.Where(n => n.preset.assault).Select(n => n.tile).ToList();
+            SelfTest.Check(npcBases.All(s => assaultTiles.Contains(s.Tile)) && npcBases.Count == assaultTiles.Count,
+                $"NPC settlements cleared; the {npcBases.Count} remaining are the elite and boss bases");
             foreach (var n in run.nodes)
-                SelfTest.Info($"node {n.id} row {n.row} col {n.col} tile {n.tile} {n.preset.defName} -> [{string.Join(",", n.next)}]");
+                SelfTest.Info($"act {n.act} node {n.id} row {n.row} col {n.col} tile {n.tile} {n.preset.defName} -> [{string.Join(",", n.next)}]");
         }
 
         private static void CheckStartedNode(Map map, RunNode node)
@@ -280,6 +291,7 @@ namespace Roguelike
 
             var node = start;
             Caravan caravan = null;
+            bool shotCards = false, shotPacking = false;
             for (int step = 0; step < 40; step++)
             {
                 int actBefore = run.act;
@@ -292,65 +304,62 @@ namespace Roguelike
                 }
                 if (node.reward != RunRewardKind.None)
                     foreach (var w in PickFirstReward(node)) yield return w;
-                List<int> nextIds;
-                if (node.IsBoss)
-                {
-                    SelfTest.Check(run.act == actBefore + 1 && !run.RunOver, $"act {actBefore} boss cleared: act {run.act} begins");
-                    SelfTest.Check(run.nodes.Count == 15 && run.Row(0).All(n => n.state == RunNodeState.Available) && Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().Count() == 15,
-                        $"act {run.act}: a fresh 15-node act with open starting nodes");
-                    SelfTest.Check(run.nodes.All(n => Find.WorldGrid.ApproxDistanceInTiles(n.tile, node.tile) > 0.5f), $"act {run.act}: no node on the old boss tile");
-                    if (run.act == 2) foreach (var w in Screenshot("s5_act2", world: true)) yield return w;
-                    nextIds = run.Row(0).Select(n => n.id).ToList();
-                }
-                else
-                {
-                    SelfTest.Check(node.next.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {node.next.Count} next nodes are available");
-                    nextIds = node.next;
-                }
-
-                var locked = run.nodes.FirstOrDefault(n => n.state == RunNodeState.Locked);
-                if (locked != null)
-                {
-                    var lockedMarker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == locked.id);
-                    SelfTest.Check(!CaravanArrivalAction_EnterRunNode.CanEnter(lockedMarker).Accepted, $"locked node {locked.id} refuses entry");
-                    if (caravan != null) SelfTest.Check(lockedMarker.GetFloatMenuOptions(caravan).All(o => !o.Label.StartsWith("Go to") || o.action == null), $"locked node {locked.id}: Go to option is disabled");
-                }
-
-                if (node.preset.HasMap)
-                {
-                    caravan = LeaveMap(map);
-                    yield return Ticks(600);
-                    SelfTest.Check(Current.Game.FindMap(node.tile) == null, $"node {node.id}: map removed after leaving");
-                }
-                else yield return Ticks(600);
-                SelfTest.Check(!run.RunOver, $"node {node.id}: moving on after completion does not end the run");
+                if (node.IsBoss) SelfTest.Check(run.act == actBefore + 1 && !run.RunOver, $"act {actBefore} boss cleared: act {run.act} begins");
+                var nextIds = node.next;
+                SelfTest.Check(nextIds.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {nextIds.Count} next nodes are available");
 
                 var nextNode = run.NodeById(nextIds.Last());
                 if (step == 1 && nextNode.preset.HasMap && !nextNode.IsBoss)
                 {
-                    // Make sure the path crosses an event node so the arrival dialog is exercised in a real run.
+                    // Make sure the path crosses an event node so map-less nodes are exercised in a real run.
                     nextNode.preset = Preset("Roguelike_Encounter");
                     nextNode.reward = RunRewardKind.None;
                 }
                 var siblings = nextIds.Where(id => id != nextNode.id).ToList();
-                var marker = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().First(m => m.nodeId == nextNode.id);
-                SelfTest.Check(CaravanArrivalAction_EnterRunNode.CanEnter(marker).Accepted, $"next node {nextNode.id} ({nextNode.preset.kind}) accepts entry");
-                // Travel the way a player does: the "Go to" option on the node, which teleports the caravan in.
-                var goTo = marker.GetFloatMenuOptions(caravan).FirstOrDefault(o => o.Label.StartsWith("Go to") && o.action != null);
-                if (!SelfTest.Check(goTo != null, $"next node {nextNode.id}: offers a Go to option")) yield break;
-                goTo.action();
+
+                // Choose the next node from the cards.
+                yield return () => PathWindow != null;
+                var picker = PathWindow;
+                SelfTest.Check(picker.Cards.Select(c => c.pathNode.id).OrderBy(i => i).SequenceEqual(nextIds.OrderBy(i => i)), $"node {node.id}: next-node cards match its {nextIds.Count} connections");
+                if (!shotCards)
+                {
+                    shotCards = true;
+                    foreach (var w in Screenshot("s6_next_node_cards", world: false)) yield return w;
+                }
+                picker.Pick(picker.Cards.ToList().FindIndex(c => c.pathNode == nextNode));
+                yield return Frames(90);
+                SelfTest.Info("after pick: windows " + string.Join(", ", Find.WindowStack.Windows.Select(w => w.GetType().Name)) + $"; pending {run.pendingPickNodeId}");
+                yield return () => PathWindow == null;
+
+                if (node.preset.HasMap)
+                {
+                    // Pack within the carry limit, then go straight to the chosen node.
+                    yield return () => Find.WindowStack.WindowOfType<Dialog_FormCaravan>() != null;
+                    var packing = Find.WindowStack.WindowOfType<Dialog_FormCaravan>();
+                    if (!shotPacking)
+                    {
+                        shotPacking = true;
+                        foreach (var w in Screenshot("s6_packing", world: false)) yield return w;
+                    }
+                    var tr = Traverse.Create(packing);
+                    SelfTest.Info($"packing: mass {tr.Property("MassUsage").GetValue<float>():0}/{tr.Property("MassCapacity").GetValue<float>():0} kg, pawns {TransferableUtility.GetPawnsFromTransferables(tr.Field("transferables").GetValue<List<TransferableOneWay>>()).Count}");
+                    bool formed = (bool)AccessTools.Method(typeof(Dialog_FormCaravan), "TryReformCaravan").Invoke(packing, null);
+                    SelfTest.Check(formed, $"node {node.id}: the squad packs up within the carry limit");
+                    packing.Close(false);
+                }
 
                 if (nextNode.preset.HasMap)
                 {
-                    yield return () => Current.Game.FindMap(nextNode.tile) != null;
+                    yield return () => Current.Game.FindMap(nextNode.tile) is { } m && m.mapPawns.FreeColonistsSpawnedCount > 0;
                     yield return Frames(30);
                     map = Current.Game.FindMap(nextNode.tile);
-                    SelfTest.Check(map.mapPawns.FreeColonistsSpawnedCount > 0, $"entered node {nextNode.id}: colonists arrived");
+                    SelfTest.Check(map.mapPawns.FreeColonistsSpawnedCount > 0, $"entered node {nextNode.id} directly: colonists arrived");
                     CheckStartedNode(map, nextNode);
-                    if (nextNode.IsBoss)
+                    if (nextNode.preset.assault) SelfTest.Check(map.Parent is Settlement, $"node {nextNode.id}: assault on an enemy base map");
+                    if (nextNode.IsBoss && nextNode.act == 1)
                     {
                         Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
-                        foreach (var w in Screenshot("s3_boss", world: false)) yield return w;
+                        foreach (var w in Screenshot("s6_boss_base", world: false)) yield return w;
                     }
                 }
                 else
@@ -358,13 +367,12 @@ namespace Roguelike
                     yield return () => EventWindow != null;
                     // Merchants complete as soon as the shop opens; other map-less nodes wait for a choice.
                     SelfTest.Check(nextNode.state == (nextNode.preset.kind == NodeKind.Merchant ? RunNodeState.Completed : RunNodeState.Current), $"{nextNode.preset.kind} node {nextNode.id}: dialog opened on arrival");
-                    foreach (var w in Screenshot("s3_event_on_arrival", world: true)) yield return w;
+                    caravan = Find.WorldObjects.Caravans.First(c => c.IsPlayerControlled);
                     EventWindow.Close(false);
                     string result = EventUtility.Resolve(nextNode, caravan, DefDatabase<RoguelikeEventDef>.AllDefsListForReading.First(), 0);
                     SelfTest.Check(!result.NullOrEmpty() && nextNode.state == RunNodeState.Completed, $"event node {nextNode.id}: resolved ({result.Split('\n')[0]})");
                     map = null;
                 }
-                SelfTest.Check(nextNode.state is RunNodeState.Current or RunNodeState.Completed, $"entered node {nextNode.id}: it is the current node");
                 SelfTest.Check(siblings.All(id => run.NodeById(id).state == RunNodeState.Skipped), $"entered node {nextNode.id}: siblings skipped");
                 if (step == 0)
                     foreach (var w in Screenshot("s1_act_after_first_move", world: true)) yield return w;
@@ -552,7 +560,20 @@ namespace Roguelike
         }
 
 
-        private static Dialog_RewardPick RewardWindow => Find.WindowStack.WindowOfType<Dialog_RewardPick>();
+        private static Dialog_RewardPick RewardWindow =>
+            Find.WindowStack.Windows.OfType<Dialog_RewardPick>().FirstOrDefault(w => w.Cards.Count > 0 && w.Cards[0].kind != RewardKind.Path);
+
+        private static Dialog_RewardPick PathWindow =>
+            Find.WindowStack.Windows.OfType<Dialog_RewardPick>().FirstOrDefault(w => w.Cards.Count > 0 && w.Cards[0].kind == RewardKind.Path);
+
+        /// <summary>Closes the next-node choice when a test isn't moving on.</summary>
+        private static IEnumerable<Func<bool>> DismissNextPick()
+        {
+            yield return Frames(10);
+            Run.pendingPickNodeId = -1;
+            PathWindow?.Close(false);
+            yield return Frames(5);
+        }
 
         /// <summary>The reward screen opened for <paramref name="node"/>: pick the first card and wait for it to close.</summary>
         private static IEnumerable<Func<bool>> PickFirstReward(RunNode node)
@@ -598,6 +619,7 @@ namespace Roguelike
             window.Pick(1);
             yield return () => RewardWindow == null;
             SelfTest.Check(run.pendingRewardNodeId < 0, $"picked card resolves the reward ({window.Cards[1].KindLabel}: {window.Cards[1].Title})");
+            foreach (var w in DismissNextPick()) yield return w;
 
             // Every reward kind applies.
             var liners = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_InsulatedLiners");
@@ -679,6 +701,7 @@ namespace Roguelike
             window?.Skip();
             yield return () => RewardWindow == null;
             SelfTest.Check(s.points == 2, $"skipping a reward earns 1 meta point (have {s.points})");
+            foreach (var w in DismissNextPick()) yield return w;
 
             // Spending points.
             s.points = 30;

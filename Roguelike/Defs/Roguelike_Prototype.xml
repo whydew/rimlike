@@ -245,9 +245,10 @@
   <!-- Elite: a tougher raid; the reward is a choice of relics. -->
   <Roguelike.NodePresetDef>
     <defName>Roguelike_EliteWarband</defName>
-    <label>elite warband</label>
-    <description>A veteran warband guards this pass. Beat them for a choice of relics.</description>
+    <label>warband stronghold</label>
+    <description>A veteran warband holds a fortified base here. Storm it for a choice of relics.</description>
     <kind>Elite</kind>
+    <assault>true</assault>
     <objective>KillAll</objective>
     <targetDays>2</targetDays>
     <threatScale>1.8</threatScale>
@@ -281,10 +282,12 @@
   <Roguelike.NodePresetDef>
     <defName>Roguelike_BossCold</defName>
     <label>frozen warlord</label>
-    <description>The warlord who rules this frozen pass has come for you, and the cold is on his side.</description>
+    <description>Storm the frozen warlord's stronghold. The cold is on his side, and his reinforcements are coming.</description>
     <kind>CombatAlerted</kind>
     <objective>KillAll</objective>
     <isBoss>true</isBoss>
+    <assault>true</assault>
+    <reinforcementDays>1.5</reinforcementDays>
     <condition>Roguelike_EscalatingCold</condition>
     <graceDays>1</graceDays>
     <offsetPerDay>-6</offsetPerDay>
@@ -296,10 +299,12 @@
   <Roguelike.NodePresetDef>
     <defName>Roguelike_BossHeat</defName>
     <label>scorched warlord</label>
-    <description>The warlord who rules this scorched waste has come for you, and the heat is on his side.</description>
+    <description>Storm the scorched warlord's stronghold. The heat is on his side, and his reinforcements are coming.</description>
     <kind>CombatAlerted</kind>
     <objective>KillAll</objective>
     <isBoss>true</isBoss>
+    <assault>true</assault>
+    <reinforcementDays>1.5</reinforcementDays>
     <condition>Roguelike_EscalatingHeat</condition>
     <graceDays>1</graceDays>
     <offsetPerDay>6</offsetPerDay>

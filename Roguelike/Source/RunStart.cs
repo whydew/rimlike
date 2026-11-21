@@ -131,3 +131,22 @@ namespace Roguelike
         }
     }
 }
+
+namespace Roguelike
+{
+    /// <summary>During a run, leaving a node only takes what the squad can carry: an overweight caravan is refused.</summary>
+    [HarmonyLib.HarmonyPatch(typeof(Dialog_FormCaravan), "CheckForErrors")]
+    public static class Patch_FormCaravan_CarryLimit
+    {
+        public static void Postfix(Dialog_FormCaravan __instance, ref bool __result)
+        {
+            if (!__result || WorldComponent_RoguelikeRun.Get is not { active: true, RunOver: false }) return;
+            var t = HarmonyLib.Traverse.Create(__instance);
+            if (!t.Field("reform").GetValue<bool>()) return;
+            float usage = t.Property("MassUsage").GetValue<float>(), capacity = t.Property("MassCapacity").GetValue<float>();
+            if (usage <= capacity) return;
+            Messages.Message($"Too heavy: {usage:0} kg packed, but the squad can only carry {capacity:0} kg.", MessageTypeDefOf.RejectInput, false);
+            __result = false;
+        }
+    }
+}

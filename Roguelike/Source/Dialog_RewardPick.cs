@@ -27,6 +27,8 @@ namespace Roguelike
         private readonly List<RewardCard> cards;
         private readonly string subtitle;
         private readonly Action<RewardCard> onPicked;
+        private readonly bool allowSkip;
+        private readonly string title;
         private readonly float[] hover;
         private float openedAt = -1f;
         private int picked = -1;
@@ -34,8 +36,10 @@ namespace Roguelike
         private float pickedAt;
         private bool resolved;
 
-        public Dialog_RewardPick(List<RewardCard> cards, string subtitle, Action<RewardCard> onPicked)
+        public Dialog_RewardPick(List<RewardCard> cards, string subtitle, Action<RewardCard> onPicked, bool allowSkip = true, string title = "Choose a reward")
         {
+            this.allowSkip = allowSkip;
+            this.title = title;
             this.cards = cards;
             this.subtitle = subtitle;
             this.onPicked = onPicked;
@@ -81,7 +85,7 @@ namespace Roguelike
 
             Text.Font = GameFont.Medium;
             Text.Anchor = TextAnchor.UpperCenter;
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 36f), "Choose a reward");
+            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 36f), title);
             Text.Font = GameFont.Small;
             GUI.color = new Color(1f, 1f, 1f, 0.7f);
             Widgets.Label(new Rect(inRect.x, inRect.y + 36f, inRect.width, 24f), subtitle);
@@ -132,7 +136,7 @@ namespace Roguelike
 
             // Skip button.
             var skipRect = new Rect(inRect.center.x - 80f, inRect.yMax - 40f, 160f, 36f);
-            if (picked < 0 && !skipped && Widgets.ButtonText(skipRect, "Skip reward")) Skip();
+            if (allowSkip && picked < 0 && !skipped && Widgets.ButtonText(skipRect, "Skip reward")) Skip();
 
             if ((picked >= 0 || skipped) && !resolved && Now - pickedAt >= ExitDuration)
             {
@@ -195,6 +199,9 @@ namespace Roguelike
                 case RewardKind.Recruit:
                     GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South));
                     break;
+                case RewardKind.Path when NodeIcons.For(card.pathNode) != null:
+                    GUI.DrawTexture(art, NodeIcons.For(card.pathNode));
+                    break;
                 case RewardKind.Relic when card.relic.iconThing != null:
                     Widgets.DefIcon(art, card.relic.iconThing, color: GUI.color);
                     break;
@@ -221,6 +228,8 @@ namespace Roguelike
                     return "Adds to your build menu for this run:\n" + string.Join(", ", card.blueprint.buildings.Select(b => b.label));
                 case RewardKind.Recruit:
                     return RecruitSummary(card.recruit);
+                case RewardKind.Path:
+                    return card.pathNode.RewardText + "\n" + card.pathNode.preset.Briefing.Replace("\n\n", "\n");
             }
             return "";
         }

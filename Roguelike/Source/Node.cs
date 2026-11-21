@@ -32,6 +32,8 @@ namespace Roguelike
         /// <summary>Relative chance among presets of the same kind.</summary>
         public float weight = 1f;
         public bool isBoss;
+        /// <summary>The node is a hostile faction base: you assault its defenders on the base's own map.</summary>
+        public bool assault;
 
         /// <summary>Weather modifier; null for none. Its rate is offsetPerDay (°C for temperature, buildup/day for toxic, levels/day for psychic).</summary>
         public GameConditionDef condition;
@@ -286,7 +288,9 @@ namespace Roguelike
             startTick = Find.TickManager.TicksGame;
             completed = failed = false;
             if (p.condition != null) map.gameConditionManager.RegisterCondition(GameConditionMaker.MakeConditionPermanent(p.condition));
-            switch (p.kind)
+            if (p.assault && map.Parent is Settlement { Faction: not null } enemyBase && !enemyBase.Faction.IsPlayer)
+                enemyFaction = enemyBase.Faction; // the base's defenders are the enemy
+            else switch (p.kind)
             {
                 case NodeKind.CombatAlerted:
                 case NodeKind.Elite:
@@ -477,12 +481,12 @@ namespace Roguelike
             var run = WorldComponent_RoguelikeRun.Get;
             var runNode = run is { active: true } ? run.NodeAt(map.Tile) : null;
             run?.NotifyNodeCompleted(map.Tile);
-            string nextStep = runNode == null || runNode.IsBoss
+            string nextStep = runNode == null || runNode.IsBoss && runNode.act >= WorldComponent_RoguelikeRun.ActsPerRun
                 ? ""
-                : "\n\nThen pick your next node on the world map: select the caravan and right-click a highlighted node.";
+                : "\n\nIf you closed the node choice, use Leave node now to bring it back.";
             var letter = (Letter_NodeComplete)LetterMaker.MakeLetter(
                 "Node complete",
-                "You've met this node's objective.\n\nLeave now to form a caravan with what your pawns and pack animals can carry. Everything else stays behind." + nextStep,
+                "You've met this node's objective.\n\nChoose your next node, then pack what your pawns and pack animals can carry. Everything else stays behind." + nextStep,
                 RoguelikeDefOf.Roguelike_NodeComplete);
             letter.map = map;
             Find.LetterStack.ReceiveLetter(letter);
@@ -530,7 +534,11 @@ namespace Roguelike
                     {
                         Find.LetterStack.RemoveLetter(this);
                         var m = map;
-                        Find.WindowStack.Add(new Dialog_FormCaravan(m, reform: true, onClosed: () => AbandonIfEmpty(m), mapAboutToBeRemoved: true));
+                        // On the run graph: pick the next node (then pack). Off the graph (debug nodes): just pack and leave.
+                        var run = WorldComponent_RoguelikeRun.Get;
+                        var node = run is { active: true } && m != null ? run.NodeAt(m.Tile) : null;
+                        if (node != null) run.RequestNextPick(node);
+                        else Find.WindowStack.Add(new Dialog_FormCaravan(m, reform: true, onClosed: () => AbandonIfEmpty(m), mapAboutToBeRemoved: true));
                     }
                 };
                 if (map == null || !Find.Maps.Contains(map)) leave.Disable("node map is gone");
