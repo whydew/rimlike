@@ -566,7 +566,7 @@ namespace Roguelike
             return new Color(0.45f, 0.62f, 0.9f);
         }
 
-        private static void DrawPawn(Rect inner, Pawn p, Color kind)
+        internal static void DrawPawn(Rect inner, Pawn p, Color kind)
         {
             float a = GUI.color.a;
             var portrait = new Rect(inner.center.x - 44f, inner.y, 88f, 88f);
@@ -634,7 +634,7 @@ namespace Roguelike
             GUI.color = new Color(1f, 1f, 1f, a);
         }
 
-        private static string Tooltip(Pawn p)
+        internal static string Tooltip(Pawn p)
         {
             string text = Dialog_RewardPick.RecruitSummary(p);
             if (p.story?.Childhood != null) text += "\n\n" + p.story.Childhood.FullDescriptionFor(p).Resolve();

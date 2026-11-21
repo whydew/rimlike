@@ -254,6 +254,17 @@ namespace Roguelike
             Text.Anchor = TextAnchor.MiddleCenter;
             Style.ShadowLabel(banner, card.KindLabel.ToUpperInvariant(), new Color(1f, 0.97f, 0.9f));
 
+            // Recruits use the same layout as the squad cards at the start of a run.
+            if (card.kind == RewardKind.Recruit)
+            {
+                Text.Anchor = TextAnchor.UpperLeft;
+                Page_RoguelikePawns.DrawPawn(new Rect(r.x + 10f, banner.yMax + 8f, r.width - 20f, r.yMax - banner.yMax - 16f), card.recruit, kind);
+                TooltipHandler.TipRegion(r, () => Page_RoguelikePawns.Tooltip(card.recruit), card.recruit.thingIDNumber);
+                if (hover > 0.05f) Style.SheenSweep(r, Mathf.Repeat(hoverAge * 0.8f, 1.7f), 0.2f * hover);
+                if (flash > 0f) Style.Box(r, new Color(1f, 1f, 1f, 0.8f * flash));
+                return;
+            }
+
             // Title.
             Text.Font = GameFont.Small;
             var titleRect = new Rect(r.x + 10f, banner.yMax + 6f, r.width - 20f, 42f);
