@@ -39,6 +39,17 @@ namespace Roguelike
 
         public bool IsBoss => type == RunNodeType.Boss;
 
+        /// <summary>The reward in a few words, for a card.</summary>
+        public string RewardShort => reward switch
+        {
+            RunRewardKind.Recruits => "Choose 1 of 3 recruits",
+            RunRewardKind.Relics => "Choose 1 of 3 relics",
+            RunRewardKind.Cards => IsBoss ? "A card, then the next act" : "Choose 1 of 3 cards",
+            _ => IsBoss ? "Wins the run" : preset.HasMap ? "None" : "Whatever you find here",
+        };
+
+        public GameConditionDef Weather => preset.randomModifier ? modifier : preset.condition;
+
         public string RewardText => reward switch
         {
             RunRewardKind.Recruits => "Reward: choose 1 of 3 recruits.",

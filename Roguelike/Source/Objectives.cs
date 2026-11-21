@@ -38,6 +38,19 @@ namespace Roguelike
             _ => "",
         };
 
+        /// <summary>The requirement in a few words, for a card.</summary>
+        public string Card(int squad) => kind switch
+        {
+            RequirementKind.Produce => $"Produce {Target(squad)} {thing.label}",
+            RequirementKind.Keep => $"Keep {Target(squad)} {thing.label}",
+            RequirementKind.Build => $"Build {Target(squad)} {(stuffCategory != null ? stuffCategory.label + " " : "")}{thing.label}",
+            RequirementKind.Bedrooms => $"{Target(squad)} bedrooms ({minCells}+ cells)",
+            RequirementKind.DiningRoom => $"Dining room ({minCells}+ cells)",
+            RequirementKind.Shelter => $"{Target(squad)} beds indoors",
+            RequirementKind.NoDeaths => "Nobody dies",
+            _ => "",
+        };
+
         public string Short(int squad, int have) => kind switch
         {
             RequirementKind.NoDeaths => have > 0 ? "no deaths" : "a squad member died",

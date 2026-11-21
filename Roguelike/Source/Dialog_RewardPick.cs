@@ -216,8 +216,14 @@ namespace Roguelike
             }
         }
 
-        private static Texture2D researchIcon;
-        private static Texture2D ResearchIcon => researchIcon ??= DefDatabase<MainButtonDef>.GetNamedSilentFail("Research")?.Icon;
+        private static Texture2D researchBadge, researchFrame;
+        private static Texture2D ResearchBadge => researchBadge ??= ContentFinder<Texture2D>.Get("Roguelike/Unlocks/Research", reportFailure: false);
+        private static Texture2D ResearchFrame => researchFrame ??= ContentFinder<Texture2D>.Get("Roguelike/Unlocks/ResearchFrame", reportFailure: false);
+
+        /// <summary>What a research project unlocks that has an icon (a building, an item), for its card art.</summary>
+        private static BuildableDef ResearchArt(ResearchProjectDef r) =>
+            r.UnlockedDefs.OfType<BuildableDef>().Where(d => d.uiIcon != null && d.uiIcon != BaseContent.BadTex)
+                .OrderBy(d => d is ThingDef { category: ThingCategory.Building } ? 0 : 1).FirstOrDefault(); // buildings first: a smithy says more than an axe
 
         private static bool IsRare(RewardCard card) =>
             card.kind == RewardKind.Relic && card.relic.rarity == RelicRarity.Rare || card.kind == RewardKind.Path && card.pathNode.IsBoss;
@@ -256,12 +262,13 @@ namespace Roguelike
 
             // Art on a glowing plinth, bobbing gently.
             float bob = Mathf.Sin(Style.Now * 2f + index) * 2f;
-            var art = new Rect(r.center.x - 50f, titleRect.yMax + 4f + bob, 100f, 100f);
+            float artSize = card.kind == RewardKind.Path ? 60f : 100f; // node cards need the room for their objective
+            var art = new Rect(r.center.x - artSize / 2f, titleRect.yMax + 4f + bob, artSize, artSize);
             Style.GlowAround(art, new Color(kind.r, kind.g, kind.b, 0.3f + 0.3f * hover), 1.8f);
             DrawArt(art, card);
 
             // Ornamental divider.
-            float dy = titleRect.yMax + 116f;
+            float dy = titleRect.yMax + artSize + 16f;
             Style.Box(new Rect(r.x + 24f, dy, r.width - 48f, 1f), new Color(kind.r, kind.g, kind.b, 0.5f));
             Style.Tex(new Rect(r.center.x - 6f, dy - 6f, 12f, 12f), Style.Glow, new Color(kind.r, kind.g, kind.b, 0.9f));
 
@@ -271,14 +278,91 @@ namespace Roguelike
             var old = GUI.color;
             GUI.color = new Color(0.88f, 0.86f, 0.8f, a);
             string text = BodyText(card);
-            Widgets.Label(body, text);
-            if (Text.CalcHeight(text, body.width) > body.height) TooltipHandler.TipRegion(r, text); // full text when it doesn't fit
+            if (card.kind == RewardKind.Path)
+            {
+                DrawPathBody(body, card.pathNode, kind, a);
+                TooltipHandler.TipRegion(r, text); // the full briefing
+            }
+            else
+            {
+                Widgets.Label(body, text);
+                if (Text.CalcHeight(text, body.width) > body.height) TooltipHandler.TipRegion(r, text); // full text when it doesn't fit
+            }
             GUI.color = old;
             Text.Font = GameFont.Small;
 
             // Light sweep on hover, and the pick flash.
             if (hover > 0.05f) Style.SheenSweep(r, Mathf.Repeat(hoverAge * 0.8f, 1.7f), 0.2f * hover);
             if (flash > 0f) Style.Box(r, new Color(1f, 1f, 1f, 0.8f * flash));
+        }
+
+        /// <summary>
+        /// A node card's text in sections: a short description, the objective as bullets, the weather, any run-ending
+        /// danger, and the reward pinned to the bottom. Bullets that don't fit become "+N more" (the tooltip has it all).
+        /// </summary>
+        private static void DrawPathBody(Rect body, RunNode node, Color kind, float a)
+        {
+            var p = node.preset;
+            var dim = new Color(0.8f, 0.78f, 0.72f, a);
+            var text = new Color(0.92f, 0.9f, 0.85f, a);
+            var head = new Color(Mathf.Lerp(kind.r, 1f, 0.35f), Mathf.Lerp(kind.g, 1f, 0.35f), Mathf.Lerp(kind.b, 1f, 0.35f), a);
+            Text.Font = GameFont.Tiny;
+
+            // Reward, pinned to the bottom in gold.
+            var reward = new Rect(body.x - 2f, body.yMax - 34f, body.width + 4f, 34f);
+            Style.Box(reward, new Color(Style.Gold.r * 0.35f, Style.Gold.g * 0.35f, Style.Gold.b * 0.35f, 0.6f * a));
+            Style.Box(new Rect(reward.x, reward.y, reward.width, 1f), new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.6f * a));
+            Style.ShadowLabel(new Rect(reward.x + 6f, reward.y + 1f, reward.width, 14f), "REWARD", new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, a));
+            Style.ShadowLabel(new Rect(reward.x + 6f, reward.y + 15f, reward.width - 8f, 18f), node.RewardShort, new Color(1f, 0.95f, 0.82f, a));
+
+            float y = body.y, bottom = reward.y - 4f;
+            // Description: at most two lines.
+            string desc = p.description;
+            float dh = Mathf.Min(Text.CalcHeight(desc, body.width), 30f);
+            GUI.color = dim;
+            Widgets.Label(new Rect(body.x, y, body.width, dh), desc);
+            y += dh + 6f;
+
+            // Leave room for the weather and danger lines below the objective.
+            string weather = p.WeatherLine(node.Weather), danger = p.DangerLine;
+            float tail = (weather != null ? 18f + Text.CalcHeight(weather, body.width - 6f) : 0f) + (danger != null ? Text.CalcHeight(danger, body.width) + 2f : 0f);
+
+            Style.ShadowLabel(new Rect(body.x, y, body.width, 14f), p.HasMap ? "OBJECTIVE" : "ON ARRIVAL", head);
+            y += 14f;
+            var lines = p.ObjectiveLines(3);
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string line = "• " + lines[i];
+                float lh = Text.CalcHeight(line, body.width - 6f);
+                bool last = i == lines.Count - 1;
+                if (y + lh + (last ? 0f : 14f) > bottom - tail)
+                {
+                    GUI.color = dim;
+                    Widgets.Label(new Rect(body.x + 4f, y, body.width - 6f, 14f), $"+{lines.Count - i} more (hover for all)");
+                    y += 14f;
+                    break;
+                }
+                GUI.color = text;
+                Widgets.Label(new Rect(body.x + 4f, y, body.width - 6f, lh), line);
+                y += lh;
+            }
+            y += 4f;
+
+            if (weather != null)
+            {
+                Style.ShadowLabel(new Rect(body.x, y, body.width, 14f), "WEATHER", head);
+                y += 14f;
+                float wh = Text.CalcHeight(weather, body.width - 6f);
+                GUI.color = text;
+                Widgets.Label(new Rect(body.x + 4f, y, body.width - 6f, wh), weather);
+                y += wh + 4f;
+            }
+            if (danger != null)
+            {
+                GUI.color = new Color(1f, 0.5f, 0.45f, a);
+                Widgets.Label(new Rect(body.x, y, body.width, Text.CalcHeight(danger, body.width)), danger);
+            }
+            GUI.color = new Color(1f, 1f, 1f, a);
         }
 
         private static void DrawCardBack(Rect r, Color kind)
@@ -297,8 +381,15 @@ namespace Roguelike
                 case RewardKind.Recruit:
                     GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
                     break;
-                case RewardKind.Research when ResearchIcon != null:
-                    GUI.DrawTexture(art.ContractedBy(16f), ResearchIcon);
+                case RewardKind.Research:
+                    var unlocked = ResearchArt(card.research);
+                    if (unlocked != null && ResearchFrame != null)
+                    {
+                        GUI.DrawTexture(art, ResearchFrame);
+                        Widgets.DefIcon(art.ContractedBy(20f), unlocked, unlocked is ThingDef td ? GenStuff.DefaultStuffFor(td) : null, color: tint);
+                        GUI.color = tint;
+                    }
+                    else if (ResearchBadge != null) GUI.DrawTexture(art, ResearchBadge);
                     break;
                 case RewardKind.Path when NodeIcons.For(card.pathNode) != null:
                     GUI.DrawTexture(art, NodeIcons.For(card.pathNode));
@@ -331,7 +422,9 @@ namespace Roguelike
                 case RewardKind.Recruit:
                     return RecruitSummary(card.recruit);
                 case RewardKind.Research:
-                    return "Completes this research right away.\n" + card.research.description.Split('\n')[0];
+                    var unlocks = card.research.UnlockedDefs.Where(d => d is BuildableDef || d is RecipeDef).Select(d => d.label).Distinct().Take(4).ToList();
+                    return "Completes this research right away." + (unlocks.Count > 0 ? "\nUnlocks: " + string.Join(", ", unlocks) + "." : "")
+                           + "\n\n" + card.research.description.Split('\n')[0];
                 case RewardKind.Path:
                     return card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }

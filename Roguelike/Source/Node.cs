@@ -142,6 +142,49 @@ namespace Roguelike
 
         public string ObjectiveText => ObjectiveTextFor(3);
 
+        /// <summary>The objective as short lines for a card: one per requirement plus how the enemy behaves.</summary>
+        public List<string> ObjectiveLines(int squad)
+        {
+            var lines = new List<string>();
+            if (!HasMap) { lines.Add("Resolves when you arrive: no map, no clock"); return lines; }
+            if (objective == ObjectiveKind.Requirements)
+            {
+                lines.AddRange(requirements.Where(r => r.kind != RequirementKind.NoDeaths).Select(r => r.Card(squad)));
+                if (minDays > 0f) lines.Add($"Stay {minDays:0.#}+ days");
+            }
+            else lines.Add(ObjectiveTextFor(squad).CapitalizeFirst());
+            if (kind is NodeKind.CombatAlerted or NodeKind.Elite) lines.Add("The enemy attacks at once");
+            if (kind == NodeKind.CombatUnaware) lines.Add("The camp hasn't seen you: scout, then strike");
+            if (patrolIntervalDays > 0f) lines.Add($"Patrols raid about every {patrolIntervalDays:0.#} days");
+            if (reinforcementDays > 0f) lines.Add($"Reinforcements arrive on day {reinforcementDays:0.#}");
+            return lines;
+        }
+
+        /// <summary>The weather in one line for a card, or null when the node has none.</summary>
+        public string WeatherLine(GameConditionDef modifier)
+        {
+            if (!HasMap) return null;
+            if (modifier == null) return randomModifier ? "One that fits the local climate" : null;
+            return $"{modifier.LabelCap}: calm {GraceFor(modifier):0.#} days, then +{PerDayText(modifier)}/day";
+        }
+
+        /// <summary>What ends the run here besides leaving early, for a card's warning line.</summary>
+        public string DangerLine =>
+            objective == ObjectiveKind.Escort ? "If the refugee dies, the run ends"
+            : requirements.Any(r => r.kind == RequirementKind.NoDeaths) ? "If anyone dies, the run ends"
+            : null;
+
+        private string PerDayText(GameConditionDef modifier)
+        {
+            float rate = RateFor(modifier);
+            var worker = modifier.conditionClass;
+            return typeof(GameCondition_EscalatingTemperature).IsAssignableFrom(worker) ? rate.ToStringTemperatureOffset("F1")
+                : typeof(GameCondition_EscalatingToxic).IsAssignableFrom(worker) ? $"{rate:0.000} toxic buildup"
+                : typeof(GameCondition_EscalatingStrikes).IsAssignableFrom(worker) ? $"{rate:0.00} strikes"
+                : typeof(GameCondition_RisingFlood).IsAssignableFrom(worker) ? $"{rate:0.#} cells of water"
+                : $"{rate:0.00} drone levels";
+        }
+
         /// <summary>The node briefing for a given weather modifier and squad size.</summary>
         public string BriefingFor(GameConditionDef modifier, int squad)
         {
@@ -156,13 +199,7 @@ namespace Roguelike
             if (reinforcementDays > 0f) sb.Append($" Enemy reinforcements arrive on day {reinforcementDays:0.#}.");
             if (modifier != null)
             {
-                float rate = RateFor(modifier);
-                var worker = modifier.conditionClass;
-                string perDay = typeof(GameCondition_EscalatingTemperature).IsAssignableFrom(worker) ? rate.ToStringTemperatureOffset("F1")
-                    : typeof(GameCondition_EscalatingToxic).IsAssignableFrom(worker) ? $"{rate:0.000} toxic buildup"
-                    : typeof(GameCondition_EscalatingStrikes).IsAssignableFrom(worker) ? $"{rate:0.00} more strikes"
-                    : typeof(GameCondition_RisingFlood).IsAssignableFrom(worker) ? $"{rate:0.#} cells of water"
-                    : $"{rate:0.00} drone levels";
+                string perDay = PerDayText(modifier);
                 sb.Append($"\n\n{modifier.LabelCap}: holds off for {GraceFor(modifier):0.#} days, then worsens by about {perDay} per day with no limit. " +
                           "It worsens slower while you're ahead of pace and faster while you're behind.");
             }

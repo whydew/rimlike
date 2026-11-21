@@ -11,6 +11,7 @@ $kinds = @{
     Starter = @{ Light = (C 120 214 110); Dark = (C 18 46 20) }
     Variety = @{ Light = (C 118 160 235); Dark = (C 16 28 52) }
     Power   = @{ Light = (C 240 200 110); Dark = (C 52 38 12) }
+    Research = @{ Light = (C 190 140 245); Dark = (C 34 20 54) }
 }
 
 # name -> kind, glyph (Segoe UI Symbol code point)[, font size for thin glyphs]
@@ -43,6 +44,9 @@ $icons = [ordered]@{
     LuckyDraw       = 'Power',   0x1F340  # clover
     FieldRations    = 'Power',   0x1F356  # meat on the bone
     VeteranKit      = 'Power',   0x1F392  # backpack
+    # Research cards: the flask badge, and a blank frame the card draws the research's unlocked building on.
+    Research        = 'Research', 0x2697  # alembic
+    ResearchFrame   = 'Research', 0
 }
 
 $size = 128
@@ -82,6 +86,7 @@ foreach ($name in $icons.Keys) {
     $sheen = RoundRect 16 16 ($size - 32) 34 12
     $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 255 255 28)), $sheen)
 
+    if ($code -eq 0) { $bmp.Save((Join-Path $out "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $bmp.Dispose(); continue }
     # Glyph: drop shadow, dark outline, white fill with a hint of the kind colour.
     $glyph = New-Object System.Drawing.Drawing2D.GraphicsPath
     $glyph.AddString([char]::ConvertFromUtf32($code), $family, 0, $em, (New-Object System.Drawing.RectangleF 0, 4, $size, $size), $fmt)

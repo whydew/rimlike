@@ -762,6 +762,14 @@ namespace Roguelike
                 SelfTest.Check(project.IsFinished && !RewardUtility.ResearchPool().Contains(project), $"research reward completes {project.label}");
             }
 
+            // Research cards show what the project unlocks on a research badge.
+            var researchCards = RewardUtility.ResearchPool().OrderByDescending(RewardUtility.ResearchWeight).Take(4)
+                .Select(r => new RewardCard { kind = RewardKind.Research, research = r }).ToList();
+            Find.WindowStack.Add(new Dialog_RewardPick(researchCards, "Self-test: research", null));
+            foreach (var w in Screenshot("s2_research_cards", world: false)) yield return w;
+            RewardWindow.Skip();
+            yield return () => RewardWindow == null;
+
             int colonists = map.mapPawns.FreeColonistsSpawnedCount;
             var recruit = RewardUtility.GenerateRecruit();
             RewardUtility.Apply(new RewardCard { kind = RewardKind.Recruit, recruit = recruit }, map);
