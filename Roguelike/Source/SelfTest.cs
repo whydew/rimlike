@@ -199,12 +199,12 @@ namespace Roguelike
 
         private static MapComponent_RoguelikeNode NodeComp(Map map) => map?.GetComponent<MapComponent_RoguelikeNode>();
 
-        private static Caravan LeaveMap(Map map)
+        private static Caravan LeaveMap(Map map, bool abandon = true)
         {
             var pawns = map.mapPawns.FreeColonistsSpawned.Concat(map.mapPawns.SpawnedColonyAnimals).ToList();
             var caravan = CaravanExitMapUtility.ExitMapAndCreateCaravan(pawns, Faction.OfPlayer, map.Tile, map.Tile, PlanetTile.Invalid, sendMessage: false);
             if (Find.Maps.Contains(map)) map.Parent.CheckRemoveMapNow();
-            Letter_NodeComplete.AbandonIfEmpty(map);
+            if (abandon) Letter_NodeComplete.AbandonIfEmpty(map);
             return caravan;
         }
 
@@ -371,6 +371,8 @@ namespace Roguelike
         {
             foreach (var w in WaitForGame()) yield return w;
             var run = Run;
+            // Debug nodes move the squad off the run graph; treat the starting node as done so leaving it is not a loss.
+            run.CurrentNode.state = RunNodeState.Completed;
 
             // Alerted combat.
             foreach (var w in EnterDebugNode("Roguelike_Ambush")) yield return w;
@@ -675,7 +677,8 @@ namespace Roguelike
             foreach (var w in WaitForGame()) yield return w;
             var run = Run;
             var node = run.CurrentNode;
-            LeaveMap(Find.CurrentMap);
+            // Leave like a player forming a normal caravan: the starting settlement stays loaded.
+            LeaveMap(Find.CurrentMap, abandon: false);
             yield return Until(() => run.RunOver);
             SelfTest.Check(run.runLost && !run.runWon, $"leaving node {node?.id} early ends the run");
             var other = run.nodes.First(n => n.row == 1);
@@ -692,6 +695,10 @@ namespace Roguelike
             var alive = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.ToList();
             SelfTest.Info($"alive colonists after wipe: {alive.Count} [{string.Join(", ", alive.Select(p => $"{p.LabelShort} dead={p.Dead} spawned={p.Spawned} map={p.MapHeld}"))}]");
             SelfTest.Check(run.runLost, "squad wipe ends the run");
+            int points = MetaProgress.S.points;
+            var node = run.CurrentNode;
+            run.NotifyNodeCompleted(node.tile);
+            SelfTest.Check(node.state == RunNodeState.Current && MetaProgress.S.points == points && !run.runWon, "a node can't be completed after the run is lost");
         }
     }
 }

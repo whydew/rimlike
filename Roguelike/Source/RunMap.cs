@@ -177,9 +177,11 @@ namespace Roguelike
                 return;
             }
             ApplyRelicHediffs();
-            // The current node's map disappears if everyone leaves (or abandons it) before the objective is met.
+            // Everyone left the current node before its objective was met: its map is gone, or (for the starting
+            // settlement, which stays loaded) nobody of ours is left on it, not even in an incoming drop pod.
             var current = CurrentNode;
-            if (current != null && current.preset.HasMap && Current.Game.FindMap(current.tile) == null)
+            var currentMap = current != null && current.preset.HasMap ? Current.Game.FindMap(current.tile) : null;
+            if (current != null && current.preset.HasMap && (currentMap == null || !currentMap.mapPawns.AnyPawnBlockingMapRemoval))
             {
                 Lose($"You left {current.preset.label} before completing its objective.");
             }
@@ -196,7 +198,7 @@ namespace Roguelike
         public void NotifyNodeCompleted(PlanetTile tile)
         {
             var node = NodeAt(tile);
-            if (!active || node == null || node.state != RunNodeState.Current) return;
+            if (!active || RunOver || node == null || node.state != RunNodeState.Current) return;
             node.state = RunNodeState.Completed;
             int points = node.IsBoss ? 5 : 1;
             pointsEarned += points;
