@@ -209,7 +209,7 @@ namespace Roguelike
             doCloseX = false;
         }
 
-        public override Vector2 InitialSize => new Vector2(620f, 500f);
+        public override Vector2 InitialSize => new Vector2(680f, 500f);
 
         public override void DoWindowContents(Rect inRect)
         {
@@ -233,10 +233,11 @@ namespace Roguelike
             };
             Widgets.Label(new Rect(inRect.x + 20f, inRect.y + 100f, inRect.width - 40f, 240f), string.Join("\n\n", lines));
 
-            float y = inRect.yMax - 40f, w = (inRect.width - 20f) / 3f;
+            float y = inRect.yMax - 40f, w = (inRect.width - 30f) / 4f;
             if (Widgets.ButtonText(new Rect(inRect.x, y, w, 38f), "Spend points")) Find.WindowStack.Add(new Dialog_Unlocks());
-            if (Widgets.ButtonText(new Rect(inRect.x + w + 10f, y, w, 38f), "Main menu")) GenScene.GoToMainMenu();
-            if (Widgets.ButtonText(new Rect(inRect.x + 2 * (w + 10f), y, w, 38f), "Keep playing")) Close();
+            if (Widgets.ButtonText(new Rect(inRect.x + (w + 10f), y, w, 38f), "New run")) NewRun.Start();
+            if (Widgets.ButtonText(new Rect(inRect.x + 2 * (w + 10f), y, w, 38f), "Main menu")) GenScene.GoToMainMenu();
+            if (Widgets.ButtonText(new Rect(inRect.x + 3 * (w + 10f), y, w, 38f), "Keep playing")) Close();
         }
     }
 }

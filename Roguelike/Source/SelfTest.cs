@@ -61,17 +61,20 @@ namespace Roguelike
     }
 
     /// <summary>Runs the self-test script one step per frame; a step yields a condition to wait for.</summary>
-    public class GameComponent_SelfTest : GameComponent
+    /// <summary>
+    /// Runs the self-test script one step per frame; a step yields a condition to wait for.
+    /// Driven from Root.Update so a script survives scene changes (main menu and back).
+    /// </summary>
+    [HarmonyPatch(typeof(Root), nameof(Root.Update))]
+    public static class SelfTestRunner
     {
-        private IEnumerator<Func<bool>> script;
-        private Func<bool> waiting;
-        private int waitStartFrame;
-        private bool finished;
+        private static IEnumerator<Func<bool>> script;
+        private static Func<bool> waiting;
+        private static int waitStartFrame;
+        private static bool finished;
         private const int TimeoutFrames = 60 * 120;
 
-        public GameComponent_SelfTest(Game game) { }
-
-        public override void GameComponentUpdate()
+        public static void Postfix()
         {
             if (!SelfTest.Enabled || finished) return;
             if (script == null)
@@ -107,7 +110,7 @@ namespace Roguelike
             }
         }
 
-        private void Finish()
+        private static void Finish()
         {
             finished = true;
             Log.Message($"{SelfTest.Tag} DONE mode={SelfTest.Mode} passed={SelfTest.Passed} failed={SelfTest.Failed}");
@@ -128,6 +131,7 @@ namespace Roguelike
             "variety" => Variety(),
             "meta" => Meta(),
             "starter" => Starter(),
+            "newrun" => NewRunScript(),
             _ => Unknown(mode),
         };
 
@@ -678,6 +682,56 @@ namespace Roguelike
             }
             Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
             foreach (var w in Screenshot("s4_starter_" + part.starterId, world: false)) yield return w;
+        }
+
+        /// <summary>Wipe, then "New run": vanilla game-over is suppressed, the same world comes back with a fresh act, and a new run starts.</summary>
+        private static IEnumerable<Func<bool>> NewRunScript()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            string seed = Find.World.info.seedString;
+            foreach (var p in Find.CurrentMap.mapPawns.FreeColonistsSpawned.ToList()) p.Kill(null);
+            yield return Until(() => run.RunOver);
+            SelfTest.Check(run.runLost && Find.WindowStack.WindowOfType<Dialog_RunEnd>() != null, "wipe: run over and the end-of-run screen is open");
+            foreach (var w in Screenshot("s5_run_end", world: false)) yield return w;
+            Find.WindowStack.WindowOfType<Dialog_RunEnd>().Close(false);
+            yield return Ticks(1500);
+            SelfTest.Check(!Find.LetterStack.LettersListForReading.Any(l => l.def == LetterDefOf.GameEnded), "vanilla game-over is suppressed once the run is over");
+
+            NewRun.Start();
+            yield return () => Current.ProgramState == ProgramState.Entry && Find.WindowStack.WindowOfType<Page_SelectStartingSite>() != null;
+            yield return Frames(60);
+            var newRun = WorldComponent_RoguelikeRun.Get;
+            SelfTest.Check(Find.World.info.seedString == seed, $"new run: same world seed ({seed})");
+            SelfTest.Check(newRun is { active: true, RunOver: false } && newRun.nodes.Count == 15 && newRun.Row(0).All(n => n.state == RunNodeState.Available),
+                "new run: a fresh act is laid out and the starting nodes are open");
+            foreach (var w in Screenshot("s5_newrun_landing", world: false)) yield return w;
+
+            // Click through the remaining setup pages.
+            var startTile = newRun.Row(0).First().tile;
+            for (int i = 0; i < 12 && Current.ProgramState != ProgramState.Playing; i++)
+            {
+                var box = Find.WindowStack.WindowOfType<Dialog_MessageBox>();
+                if (box != null)
+                {
+                    box.buttonAAction?.Invoke();
+                    box.Close(false);
+                    yield return Frames(30);
+                    continue;
+                }
+                var page = Find.WindowStack.Windows.OfType<Page>().LastOrDefault();
+                if (page == null) { yield return Frames(30); continue; }
+                if (page is Page_SelectStartingSite) Find.WorldInterface.SelectedTile = startTile;
+                SelfTest.Info("setup page: " + page.GetType().Name);
+                if ((bool)AccessTools.Method(page.GetType(), "CanDoNext").Invoke(page, null))
+                    AccessTools.Method(page.GetType(), "DoNext").Invoke(page, null);
+                yield return Frames(60);
+            }
+            yield return () => Current.ProgramState == ProgramState.Playing && Find.CurrentMap != null;
+            yield return Frames(60);
+            var started = WorldComponent_RoguelikeRun.Get;
+            SelfTest.Check(started is { active: true, RunOver: false } && started.CurrentNode?.tile == startTile, "new run: landed on the chosen starting node");
+            SelfTest.Check(NodeComp(Find.CurrentMap) is { Active: true }, "new run: the starting node's objective is running");
         }
 
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>
