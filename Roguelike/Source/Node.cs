@@ -43,6 +43,8 @@ namespace Roguelike
         public float maxPaceFactor = 2.5f;
         /// <summary>Tile average temperatures (°C) this preset fits, so modifiers match the biome.</summary>
         public FloatRange tileTemperature = new FloatRange(-999f, 999f);
+        /// <summary>Only on coastal tiles (floods and hurricanes).</summary>
+        public bool coastalOnly;
         public int mapSize = 150;
 
         public List<ThingDefCountClass> quota = new List<ThingDefCountClass>();
@@ -88,6 +90,8 @@ namespace Roguelike
                     var worker = condition.conditionClass;
                     string rate = typeof(GameCondition_EscalatingTemperature).IsAssignableFrom(worker) ? offsetPerDay.ToStringTemperatureOffset("F0")
                         : typeof(GameCondition_EscalatingToxic).IsAssignableFrom(worker) ? $"{offsetPerDay:0.00} toxic buildup"
+                        : typeof(GameCondition_EscalatingStrikes).IsAssignableFrom(worker) ? $"{offsetPerDay:0.0} more strikes"
+                        : typeof(GameCondition_RisingFlood).IsAssignableFrom(worker) ? $"{offsetPerDay:0} cells of water"
                         : $"{offsetPerDay:0.#} drone levels";
                     sb.Append($"\n\n{condition.LabelCap}: holds off for {graceDays:0.#} days, then worsens by about {rate} per day with no limit. " +
                               "It worsens slower while you're ahead of pace and faster while you're behind.");

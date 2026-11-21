@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===================== Disaster modifiers =====================
+    Like other node modifiers, these hold off for the grace period and then escalate with no cap.
+    For meteors, tornadoes and the hurricane, offsetPerDay is how many more strikes per day each day.
+    For the flood, it is how many cells inland the water advances per day.
+  -->
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingMeteors</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingMeteors</conditionClass>
+    <label>meteor storm</label>
+    <description>Meteors fall more often and hit harder every day. Watch for their shadows.</description>
+  </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingTornadoes</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingTornadoes</conditionClass>
+    <label>tornado season</label>
+    <description>Tornadoes touch down more often every day.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingStorm</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingStorm</conditionClass>
+    <label>hurricane</label>
+    <description>A hurricane batters the coast. Lightning strikes more often every day.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_RisingFlood</defName>
+    <conditionClass>Roguelike.GameCondition_RisingFlood</conditionClass>
+    <label>tidal surge</label>
+    <description>The sea is rising and pushing inland every day, drowning everything it reaches.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <!-- A vanilla meteor with an aftermath on impact. -->
+  <ThingDef ParentName="MeteoriteIncoming">
+    <defName>Roguelike_MeteorIncoming</defName>
+    <label>meteor (incoming)</label>
+    <thingClass>Roguelike.Skyfaller_RoguelikeMeteor</thingClass>
+  </ThingDef>
+
+  <!-- ===================== Disaster expeditions ===================== -->
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_MeteorField</defName>
+    <label>meteor field</label>
+    <description>Salvage steel from the impact craters while the sky keeps falling.</description>
+    <condition>Roguelike_EscalatingMeteors</condition>
+    <offsetPerDay>0.8</offsetPerDay>
+    <weight>0.7</weight>
+    <quota>
+      <Steel>250</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_TornadoAlley</defName>
+    <label>tornado alley</label>
+    <description>Hold out on the open plains while the tornadoes multiply.</description>
+    <objective>Survive</objective>
+    <surviveDays>4</surviveDays>
+    <targetDays>4</targetDays>
+    <condition>Roguelike_EscalatingTornadoes</condition>
+    <offsetPerDay>0.6</offsetPerDay>
+    <tileTemperature>0~35</tileTemperature>
+    <weight>0.7</weight>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_HurricaneCoast</defName>
+    <label>hurricane coast</label>
+    <description>Build a storm shelter before the hurricane's lightning finds you.</description>
+    <objective>Build</objective>
+    <condition>Roguelike_EscalatingStorm</condition>
+    <offsetPerDay>3</offsetPerDay>
+    <coastalOnly>true</coastalOnly>
+    <tileTemperature>10~100</tileTemperature>
+    <weight>0.7</weight>
+    <buildTarget>
+      <Wall>60</Wall>
+      <Door>2</Door>
+    </buildTarget>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_TidalSurge</defName>
+    <label>tidal surge</label>
+    <description>Gather supplies before the sea swallows the coast.</description>
+    <condition>Roguelike_RisingFlood</condition>
+    <offsetPerDay>10</offsetPerDay>
+    <coastalOnly>true</coastalOnly>
+    <weight>0.7</weight>
+    <quota>
+      <WoodLog>350</WoodLog>
+      <Steel>120</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+</Defs>

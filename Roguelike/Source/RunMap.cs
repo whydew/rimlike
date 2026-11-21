@@ -406,6 +406,9 @@ namespace Roguelike
                     : (n.row == RowSizes.Length - 2 ? PreBossRowKinds : MiddleRowKinds).RandomElementByWeight(k => k.weight).kind;
                 var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind)).ToList();
                 if (pool.Count == 0) pool = all.Where(p => !p.isBoss && p.kind == NodeKind.Expedition).ToList();
+                bool coastal = Find.World.CoastDirectionAt(n.tile).IsValid;
+                var placeable = pool.Where(p => !p.coastalOnly || coastal).ToList();
+                if (placeable.Count > 0) pool = placeable;
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
                 var options = fitting.Count > 0 ? fitting : pool;
                 n.preset = options.RandomElementByWeight(p => p.weight);

@@ -132,6 +132,7 @@ namespace Roguelike
             "meta" => Meta(),
             "starter" => Starter(),
             "newrun" => NewRunScript(),
+            "disasters" => Disasters(),
             _ => Unknown(mode),
         };
 
@@ -805,6 +806,72 @@ namespace Roguelike
             var started = WorldComponent_RoguelikeRun.Get;
             SelfTest.Check(started is { active: true, RunOver: false } && started.CurrentNode?.tile == startTile, "new run: landed on the chosen starting node");
             SelfTest.Check(NodeComp(Find.CurrentMap) is { Active: true }, "new run: the starting node's objective is running");
+        }
+
+        /// <summary>Meteors with aftermath, tornadoes, the hurricane and the flood, on debug nodes.</summary>
+        private static IEnumerable<Func<bool>> Disasters()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            run.CurrentNode.state = RunNodeState.Completed;
+
+            // Meteors.
+            foreach (var w in EnterDebugNode("Roguelike_MeteorField")) yield return w;
+            var map = Find.CurrentMap;
+            var comp = NodeComp(map);
+            var meteors = comp.Condition as GameCondition_EscalatingMeteors;
+            SelfTest.Check(meteors != null, "meteor field: meteor storm registered");
+            comp.startTick -= (int)((comp.GraceDays + 0.5f) * GenDate.TicksPerDay);
+            comp.AdvanceThreat(1f);
+            SelfTest.Check(meteors.intensity > 0f, $"meteor storm escalates after grace ({meteors.IntensityText(meteors.intensity)})");
+            var colonist = map.mapPawns.FreeColonistsSpawned.First();
+            if (!CellFinder.TryFindRandomCellNear(colonist.Position, map, 9, c => c.Standable(map) && !c.Roofed(map) && c.DistanceTo(colonist.Position) >= 6f, out var target))
+                target = colonist.Position + new IntVec3(6, 0, 0);
+            int impacts = Skyfaller_RoguelikeMeteor.Impacts;
+            GameCondition_EscalatingMeteors.SpawnMeteor(map, target, 3);
+            Find.CameraDriver.JumpToCurrentMapLoc(target);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            yield return Frames(20);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+            foreach (var w in Screenshot("s5_meteor_falling", world: false)) yield return w;
+            yield return Until(() => Skyfaller_RoguelikeMeteor.Impacts > impacts);
+            SelfTest.Check(GenRadial.RadialCellsAround(target, 3f, true).Any(c => c.InBounds(map) && c.GetThingList(map).Any(t => t.def == ThingDefOf.Filth_RubbleRock)), "meteor: leaves a rubble crater");
+            SelfTest.Check(colonist.stances.stunner.Stunned || colonist.Dead || colonist.Downed, "meteor: the shockwave stuns nearby pawns");
+            SelfTest.Check(map.listerThings.ThingsOfDef(ThingDefOf.ChunkSlagSteel).Any(), "meteor: drops salvage");
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+            foreach (var w in Screenshot("s5_meteor_aftermath", world: false)) yield return w;
+            foreach (var c in map.mapPawns.FreeColonistsSpawned) HealthUtility.HealNonPermanentInjuriesAndRestoreLegs(c);
+            foreach (var f in map.listerThings.ThingsOfDef(ThingDefOf.Fire).ToList()) f.Destroy();
+
+            // Tornadoes.
+            foreach (var w in EnterDebugNode("Roguelike_TornadoAlley")) yield return w;
+            map = Find.CurrentMap;
+            var tornadoes = NodeComp(map).Condition as GameCondition_EscalatingTornadoes;
+            tornadoes.Strike(map);
+            SelfTest.Check(map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("Tornado")).Any(), "tornado season: a tornado touches down");
+            foreach (var t in map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("Tornado")).ToList()) t.Destroy();
+
+            // Hurricane.
+            foreach (var w in EnterDebugNode("Roguelike_HurricaneCoast")) yield return w;
+            map = Find.CurrentMap;
+            var storm = NodeComp(map).Condition as GameCondition_EscalatingStorm;
+            SelfTest.Check(storm?.ForcedWeather()?.defName == "RainyThunderstorm", "hurricane: forces a thunderstorm");
+            int events = map.weatherManager.eventHandler.LiveEventsListForReading.Count;
+            storm.Strike(map);
+            SelfTest.Check(map.weatherManager.eventHandler.LiveEventsListForReading.Count > events, "hurricane: lightning strikes");
+
+            // Flood.
+            foreach (var w in EnterDebugNode("Roguelike_TidalSurge")) yield return w;
+            map = Find.CurrentMap;
+            var flood = NodeComp(map).Condition as GameCondition_RisingFlood;
+            int Water(TerrainDef d) => map.AllCells.Count(c => c.GetTerrain(map) == d);
+            int shallowBefore = Water(TerrainDefOf.WaterShallow), deepBefore = Water(TerrainDefOf.WaterDeep);
+            flood.intensity = 16f;
+            flood.ApplyEffects(map);
+            SelfTest.Check(Water(TerrainDefOf.WaterShallow) > shallowBefore + map.Size.x, $"flood: the front turns ground to shallow water (edge {flood.edge})");
+            SelfTest.Check(Water(TerrainDefOf.WaterDeep) > deepBefore, "flood: deep water follows behind the front");
+            Find.CameraDriver.JumpToCurrentMapLoc(map.Center);
+            foreach (var w in Screenshot("s5_flood", world: false)) yield return w;
         }
 
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>
