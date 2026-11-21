@@ -179,18 +179,14 @@ namespace Roguelike
         private static readonly List<Style.Particle> particles = new List<Style.Particle>();
         private static readonly List<(string text, float at)> floaters = new List<(string, float)>();
 
-        private static readonly Dictionary<string, ThingDef> starterIcons = new Dictionary<string, ThingDef>();
+        private static readonly Dictionary<string, Texture2D> icons = new Dictionary<string, Texture2D>();
 
-        /// <summary>A starter shows its signature relic's icon when it has a distinct one.</summary>
-        private static ThingDef StarterIcon(UnlockDef u)
+        /// <summary>Each unlock's own badge (Textures/Roguelike/Unlocks, from Tools/make-unlock-icons.ps1).</summary>
+        private static Texture2D Icon(UnlockDef u)
         {
-            if (u.starterId == null) return null;
-            if (starterIcons.TryGetValue(u.starterId, out var icon)) return icon;
-            icon = DefDatabase<ScenarioDef>.AllDefs
-                .SelectMany(d => d.scenario.AllParts.OfType<ScenPart_RoguelikeRun>())
-                .FirstOrDefault(p => p.starterId == u.starterId)?.starterRelic?.iconThing;
-            if (icon == ThingDefOf.Gold) icon = null; // placeholder icon: the emblem reads better
-            return starterIcons[u.starterId] = icon;
+            if (!icons.TryGetValue(u.defName, out var tex))
+                icons[u.defName] = tex = ContentFinder<Texture2D>.Get("Roguelike/Unlocks/" + u.defName.Replace("Roguelike_Unlock_", ""), reportFailure: false);
+            return tex;
         }
 
         private static Color KindColor(UnlockDef u) => u.starterId != null ? StarterC : u.IsPower ? Style.Gold : VarietyC;
@@ -349,8 +345,10 @@ namespace Roguelike
             // Icon.
             var icon = new Rect(r.x + 10f, r.y + 12f, 40f, 40f);
             Style.GlowAround(icon, new Color(c.r, c.g, c.b, 0.35f), 1.6f);
-            var thing = u.relic?.iconThing ?? u.gear?.thing ?? (u.blueprint != null && u.blueprint.buildings.Count > 0 ? u.blueprint.buildings[0] : null) ?? StarterIcon(u);
-            if (thing != null) Widgets.DefIcon(icon, thing, GenStuff.DefaultStuffFor(thing), color: GUI.color);
+            var iconTex = Icon(u);
+            var thing = u.relic?.iconThing ?? u.gear?.thing ?? (u.blueprint != null && u.blueprint.buildings.Count > 0 ? u.blueprint.buildings[0] : null);
+            if (iconTex != null) Style.Tex(icon.ExpandedBy(4f), iconTex, Color.white);
+            else if (thing != null) Widgets.DefIcon(icon, thing, GenStuff.DefaultStuffFor(thing), color: GUI.color);
             else
             {
                 Text.Font = GameFont.Medium;

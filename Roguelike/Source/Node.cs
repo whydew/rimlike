@@ -80,10 +80,17 @@ namespace Roguelike
             if (missingRes.Count > 0) return $"needs research: {string.Join(", ", missingRes.Select(r => r.label))}";
             if (requiresSkill != null && squad != null && !squad.Any(p => p.skills?.GetSkill(requiresSkill) is { TotallyDisabled: false } s && s.Level >= requiresSkillLevel))
                 return $"needs a colonist with {requiresSkill.skillLabel} {requiresSkillLevel}";
+            // Buildings the objective asks for may need a skilled builder (hospital bed: Construction 8).
+            int build = BuildSkillNeeded;
+            if (build > 0 && squad != null && !squad.Any(p => p.skills?.GetSkill(SkillDefOf.Construction) is { TotallyDisabled: false } s && s.Level >= build))
+                return $"needs a colonist with construction {build}";
             if (growingTwelfths > 0 && tile.Valid && GenTemperature.TwelfthsInAverageTemperatureRange(tile, 6f, 42f).Count < growingTwelfths)
                 return "growing season too short here";
             return true;
         }
+
+        public int BuildSkillNeeded =>
+            requirements.Where(r => r.kind == RequirementKind.Build && r.thing != null).Select(r => r.thing.constructionSkillPrerequisite).DefaultIfEmpty(0).Max();
 
         public string NeedsText
         {
@@ -93,6 +100,7 @@ namespace Roguelike
                 if (requiresBlueprints.Count > 0) parts.Add("blueprints " + string.Join(", ", requiresBlueprints.Select(b => b.label)));
                 if (requiresResearch.Count > 0) parts.Add("research " + string.Join(", ", requiresResearch.Select(r => r.label)));
                 if (requiresSkill != null) parts.Add($"a colonist with {requiresSkill.skillLabel} {requiresSkillLevel}");
+                if (BuildSkillNeeded > 0) parts.Add($"a colonist with construction {BuildSkillNeeded}");
                 return parts.Count == 0 ? null : "Needs " + string.Join("; ", parts) + ".";
             }
         }

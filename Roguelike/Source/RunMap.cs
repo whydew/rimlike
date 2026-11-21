@@ -239,6 +239,9 @@ namespace Roguelike
                 var dialog = HarmonyLib.Traverse.Create(packing);
                 dialog.Field("thisWindowInstanceEverOpened").SetValue(true);
                 dialog.Field("canChooseRoute").SetValue(false); // no route to pick: the destination is the chosen node
+                // The whole squad must leave (pawns are read-only), so vanilla hides Cancel; the X and Escape go back to the node choice.
+                packing.doCloseX = true;
+                packing.closeOnCancel = true;
                 HarmonyLib.AccessTools.Method(typeof(Dialog_FormCaravan), "CalculateAndRecacheTransferables").Invoke(packing, null);
                 Find.WindowStack.Add(packing);
                 return;

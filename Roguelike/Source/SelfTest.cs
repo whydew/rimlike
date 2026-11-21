@@ -341,6 +341,14 @@ namespace Roguelike
                     {
                         shotPacking = true;
                         foreach (var w in Screenshot("s6_packing", world: false)) yield return w;
+                        // Backing out of packing returns to the next-node choice.
+                        SelfTest.Check(packing.doCloseX && packing.closeOnCancel, $"node {node.id}: packing can be cancelled");
+                        packing.Close();
+                        yield return () => PathWindow != null;
+                        SelfTest.Check(run.NodeById(node.id).state == RunNodeState.Completed && nextNode.state == RunNodeState.Available, $"node {node.id}: cancelling packing brings back the next-node cards");
+                        PathWindow.Pick(PathWindow.Cards.ToList().FindIndex(c => c.pathNode == nextNode));
+                        yield return () => Find.WindowStack.WindowOfType<Dialog_FormCaravan>() != null;
+                        packing = Find.WindowStack.WindowOfType<Dialog_FormCaravan>();
                     }
                     var tr = Traverse.Create(packing);
                     SelfTest.Info($"packing: mass {tr.Property("MassUsage").GetValue<float>():0}/{tr.Property("MassCapacity").GetValue<float>():0} kg, pawns {TransferableUtility.GetPawnsFromTransferables(tr.Field("transferables").GetValue<List<TransferableOneWay>>()).Count}");
@@ -1079,7 +1087,20 @@ namespace Roguelike
             report = campus.Eligible(run, start.tile, squad);
             SelfTest.Check(!report.Accepted && report.Reason.Contains("research"), $"then refused until its research is done ({report.Reason})");
             foreach (var r in campus.requiresResearch.Where(r => !r.IsFinished)) Find.ResearchManager.FinishProject(r, doCompletionLetter: false);
-            SelfTest.Check(campus.Eligible(run, start.tile, squad).Accepted, "and offered once blueprints and research are in place");
+            var builder0 = squad.First(p => !p.skills.GetSkill(SkillDefOf.Construction).TotallyDisabled);
+            builder0.skills.GetSkill(SkillDefOf.Construction).Level = Math.Max(builder0.skills.GetSkill(SkillDefOf.Construction).Level, campus.BuildSkillNeeded);
+            SelfTest.Check(campus.Eligible(run, start.tile, squad).Accepted, $"and offered once blueprints, research and a builder (construction {campus.BuildSkillNeeded}) are in place");
+
+            // Buildings that need a skilled builder gate the objective too (hospital bed and vitals monitor: Construction 8).
+            var hospital = Preset("Roguelike_FieldHospital");
+            foreach (var b in hospital.requiresBlueprints) if (!run.blueprints.Contains(b)) run.blueprints.Add(b);
+            foreach (var r in hospital.requiresResearch.Where(r => !r.IsFinished)) Find.ResearchManager.FinishProject(r, doCompletionLetter: false);
+            foreach (var p in squad) p.skills.GetSkill(SkillDefOf.Construction).Level = 3;
+            report = hospital.Eligible(run, start.tile, squad);
+            SelfTest.Check(!report.Accepted && report.Reason.Contains("construction 8"), $"field hospital needs a skilled builder ({report.Reason})");
+            var builder = squad.FirstOrDefault(p => !p.skills.GetSkill(SkillDefOf.Construction).TotallyDisabled);
+            if (builder != null) builder.skills.GetSkill(SkillDefOf.Construction).Level = 10;
+            SelfTest.Check(builder != null && hospital.Eligible(run, start.tile, squad).Accepted, "and is offered once someone can build it");
 
             var garden = Preset("Roguelike_MedicinalGarden");
             foreach (var p in squad) p.skills.GetSkill(SkillDefOf.Plants).Level = 3;
@@ -1121,6 +1142,7 @@ namespace Roguelike
             var near = map.mapPawns.FreeColonistsSpawned.First().Position;
             foreach (var cell in GenRadial.RadialCellsAround(near, 40f, false))
             {
+                if (cell.DistanceToEdge(map) < 15) continue; // wind turbines scan a long strip around them
                 var rect = GenAdj.OccupiedRect(cell, Rot4.North, def.size).ExpandedBy(1);
                 if (!rect.InBounds(map) || !rect.Cells.All(c => c.Standable(map) && c.GetFirstPawn(map) == null && c.GetEdifice(map) == null)) continue;
                 var b = ThingMaker.MakeThing(def, def.MadeFromStuff ? GenStuff.DefaultStuffFor(def) : null);
