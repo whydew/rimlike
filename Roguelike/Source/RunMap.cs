@@ -14,7 +14,7 @@ namespace Roguelike
     public enum RunNodeState { Locked, Available, Current, Completed, Skipped }
 
     /// <summary>What clearing the node offers: a mixed card draw, recruits only, or nothing (boss).</summary>
-    public enum RunRewardKind { Cards, Recruits, None }
+    public enum RunRewardKind { Cards, Recruits, None, Relics }
 
     /// <summary>One node of the act graph.</summary>
     public class RunNode : IExposable
@@ -34,6 +34,7 @@ namespace Roguelike
         public string RewardText => reward switch
         {
             RunRewardKind.Recruits => "Reward: choose 1 of 3 recruits.",
+            RunRewardKind.Relics => "Reward: choose 1 of 3 relics.",
             RunRewardKind.Cards => IsBoss ? "Reward: choose a card, then the next act begins." : "Reward: choose 1 of 3 cards (relic, gear, implant or blueprint).",
             _ => IsBoss ? "Reward: wins the run." : "Reward: none (events resolve on the spot).",
         };
@@ -401,7 +402,8 @@ namespace Roguelike
             {
                 float temp = Find.WorldGrid[n.tile].temperature;
                 // Starting nodes are always expeditions (the landing site is a fresh camp); later rows mix node kinds.
-                var kind = n.IsBoss ? (NodeKind?)null : n.row == 0 ? NodeKind.Expedition : MiddleRowKinds.RandomElementByWeight(k => k.weight).kind;
+                var kind = n.IsBoss ? (NodeKind?)null : n.row == 0 ? NodeKind.Expedition
+                    : (n.row == RowSizes.Length - 2 ? PreBossRowKinds : MiddleRowKinds).RandomElementByWeight(k => k.weight).kind;
                 var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind)).ToList();
                 if (pool.Count == 0) pool = all.Where(p => !p.isBoss && p.kind == NodeKind.Expedition).ToList();
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
@@ -409,14 +411,22 @@ namespace Roguelike
                 n.preset = options.RandomElementByWeight(p => p.weight);
                 // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
                 n.reward = n.IsBoss ? (act < ActsPerRun ? RunRewardKind.Cards : RunRewardKind.None)
-                    : n.preset.kind == NodeKind.Event ? RunRewardKind.None
+                    : !n.preset.HasMap ? RunRewardKind.None
+                    : n.preset.kind == NodeKind.Elite ? RunRewardKind.Relics
                     : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
             }
         }
 
         private static readonly (NodeKind kind, float weight)[] MiddleRowKinds =
         {
-            (NodeKind.Expedition, 40f), (NodeKind.CombatAlerted, 20f), (NodeKind.CombatUnaware, 15f), (NodeKind.Escort, 10f), (NodeKind.Event, 15f),
+            (NodeKind.Expedition, 30f), (NodeKind.CombatAlerted, 15f), (NodeKind.CombatUnaware, 12f), (NodeKind.Escort, 8f), (NodeKind.Event, 12f),
+            (NodeKind.Elite, 8f), (NodeKind.Merchant, 6f), (NodeKind.Treasure, 5f), (NodeKind.Rest, 4f),
+        };
+
+        /// <summary>The row before the boss leans toward rest sites, like a campfire before a boss.</summary>
+        private static readonly (NodeKind kind, float weight)[] PreBossRowKinds =
+        {
+            (NodeKind.Rest, 45f), (NodeKind.Merchant, 15f), (NodeKind.Expedition, 20f), (NodeKind.Elite, 10f), (NodeKind.Event, 10f),
         };
 
         // ---------- Drawing ----------

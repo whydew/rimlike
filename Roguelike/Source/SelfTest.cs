@@ -354,7 +354,8 @@ namespace Roguelike
                 else
                 {
                     yield return () => EventWindow != null;
-                    SelfTest.Check(nextNode.state == RunNodeState.Current, $"event node {nextNode.id}: dialog opened on arrival");
+                    // Merchants complete as soon as the shop opens; other map-less nodes wait for a choice.
+                    SelfTest.Check(nextNode.state == (nextNode.preset.kind == NodeKind.Merchant ? RunNodeState.Completed : RunNodeState.Current), $"{nextNode.preset.kind} node {nextNode.id}: dialog opened on arrival");
                     foreach (var w in Screenshot("s3_event_on_arrival", world: true)) yield return w;
                     EventWindow.Close(false);
                     string result = EventUtility.Resolve(nextNode, caravan, DefDatabase<RoguelikeEventDef>.AllDefsListForReading.First(), 0);
@@ -504,6 +505,48 @@ namespace Roguelike
             yield return () => EventWindow != null;
             foreach (var w in Screenshot("s3_event", world: true)) yield return w;
             EventWindow.Close(false);
+
+            // Rest site options.
+            var rest = DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_RestSite");
+            var trainee = caravan.PawnsListForReading.First(p => p.RaceProps.Humanlike);
+            float xpBefore = trainee.skills.skills.Sum(s => s.XpTotalEarned + s.xpSinceLastLevel);
+            EventUtility.Resolve(fake, caravan, rest, 1);
+            SelfTest.Check(trainee.skills.skills.Sum(s => s.XpTotalEarned + s.xpSinceLastLevel) > xpBefore, "rest site: training raises a skill");
+            var patient = caravan.PawnsListForReading.First(p => p.RaceProps.Humanlike);
+            patient.TakeDamage(new DamageInfo(DamageDefOf.Cut, 8f));
+            int Bad() => caravan.PawnsListForReading.Where(p => p.RaceProps.Humanlike).Sum(p => p.health.hediffSet.hediffs.Count(h => h.def.isBad && h.Visible));
+            int badBefore = Bad();
+            EventUtility.Resolve(fake, caravan, rest, 2);
+            SelfTest.Check(Bad() < badBefore, $"rest site: field surgery treats a condition ({badBefore} -> {Bad()})");
+
+            // Treasure: forcing the vault gives two relics and hurts someone.
+            relics = run.relics.Count;
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_Treasure"), 1);
+            SelfTest.Check(run.relics.Count == relics + 2, $"treasure: forcing the vault gives two relics ({run.relics.Count - relics})");
+
+            // Merchant: buy with caravan silver.
+            EventUtility.Resolve(fake, caravan, DefDatabase<RoguelikeEventDef>.GetNamed("Roguelike_Event_Stash"), 0);
+            var extra = ThingMaker.MakeThing(ThingDefOf.Silver);
+            extra.stackCount = 1000;
+            CaravanInventoryUtility.GiveThing(caravan, extra);
+            int silver = ShopUtility.Silver(caravan);
+            SelfTest.Check(silver >= 1250, $"silver: the stash and gifts reach the caravan ({silver})");
+            var shopNode = new RunNode { id = -1, tile = caravan.Tile, preset = Preset("Roguelike_Merchant") };
+            var stock = ShopUtility.Open(shopNode, caravan);
+            SelfTest.Check(stock.Count >= 3, $"merchant: offers {stock.Count} cards");
+            yield return () => EventWindow != null;
+            foreach (var w in Screenshot("s5_merchant", world: true)) yield return w;
+            var item = stock[0];
+            int price = ShopUtility.Price(item);
+            SelfTest.Check(ShopUtility.Buy(stock, item, caravan) && ShopUtility.Silver(caravan) == silver - price && !stock.Contains(item), $"merchant: buying {item.Title} costs {price} silver");
+            int left = ShopUtility.Silver(caravan);
+            SelfTest.Check(!ShopUtility.TrySpend(caravan, left + 1) && ShopUtility.Silver(caravan) == left, "merchant: can't overspend");
+            EventWindow?.Close(false);
+
+            // Elite: a tough raid and a relic-only reward.
+            int relicPool = RewardUtility.RelicPool(run).Count();
+            var eliteCards = RewardUtility.Generate(run, RunRewardKind.Relics);
+            SelfTest.Check(eliteCards.Count(c => c.kind == RewardKind.Relic) == Math.Min(relicPool, eliteCards.Count), $"elite reward: relic cards while the pool lasts ({relicPool} left in pool)");
         }
 
 

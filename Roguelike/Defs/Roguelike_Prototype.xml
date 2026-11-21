@@ -242,6 +242,41 @@
     <kind>Event</kind>
   </Roguelike.NodePresetDef>
 
+  <!-- Elite: a tougher raid; the reward is a choice of relics. -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_EliteWarband</defName>
+    <label>elite warband</label>
+    <description>A veteran warband guards this pass. Beat them for a choice of relics.</description>
+    <kind>Elite</kind>
+    <objective>KillAll</objective>
+    <targetDays>2</targetDays>
+    <threatScale>1.8</threatScale>
+  </Roguelike.NodePresetDef>
+
+  <!-- Map-less service nodes. -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_RestSite</defName>
+    <label>rest site</label>
+    <description>A sheltered spot to catch your breath.</description>
+    <kind>Rest</kind>
+    <eventDef>Roguelike_Event_RestSite</eventDef>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_Merchant</defName>
+    <label>merchant</label>
+    <description>A travelling trader. Pay with the silver your caravan carries.</description>
+    <kind>Merchant</kind>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_Treasure</defName>
+    <label>treasure</label>
+    <description>Something valuable is hidden here.</description>
+    <kind>Treasure</kind>
+    <eventDef>Roguelike_Event_Treasure</eventDef>
+  </Roguelike.NodePresetDef>
+
   <!-- Bosses: a large raid under brutal weather. -->
   <Roguelike.NodePresetDef>
     <defName>Roguelike_BossCold</defName>
@@ -274,6 +309,39 @@
   </Roguelike.NodePresetDef>
 
   <!-- ===================== Events ===================== -->
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_RestSite</defName>
+    <label>rest site</label>
+    <pooled>false</pooled>
+    <text>A sheltered hollow, out of the wind. There is time for one thing before you move on.</text>
+    <options>
+      <li><label>Rest</label><result>Everyone sleeps soundly for once.</result><outcomes><li><kind>HealAll</kind></li></outcomes></li>
+      <li><label>Train</label><result>You drill until dark.</result><outcomes><li><kind>TrainSkills</kind><amount>4000</amount></li></outcomes></li>
+      <li><label>Field surgery</label><result>With steady hands and a clean knife, you treat the worst of your wounds.</result><outcomes><li><kind>FixWorst</kind></li></outcomes></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_Treasure</defName>
+    <label>sealed vault</label>
+    <pooled>false</pooled>
+    <text>An old vault, half-buried. Its lock is rusted; its inner door is trapped.</text>
+    <options>
+      <li><label>Take what's in the antechamber</label><result>You find a relic waiting in the dust.</result><outcomes><li><kind>RandomRelic</kind></li></outcomes></li>
+      <li><label>Force the inner door</label><result>The trap fires as the door gives way, but the inner vault holds more.</result><outcomes><li><kind>RandomRelic</kind></li><li><kind>RandomRelic</kind></li><li><kind>InjureRandom</kind><amount>18</amount></li></outcomes></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
+  <Roguelike.RoguelikeEventDef>
+    <defName>Roguelike_Event_Stash</defName>
+    <label>buried stash</label>
+    <text>Fresh digging marks under a dead tree. Someone hid something here recently.</text>
+    <options>
+      <li><label>Dig it up</label><result>A sack of silver coins.</result><outcomes><li><kind>Silver</kind><amount>250</amount></li></outcomes></li>
+      <li><label>Leave it</label><result>You leave the stash for its owner.</result></li>
+    </options>
+  </Roguelike.RoguelikeEventDef>
+
   <Roguelike.RoguelikeEventDef>
     <defName>Roguelike_Event_CargoPod</defName>
     <label>crashed cargo pod</label>

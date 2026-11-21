@@ -116,6 +116,11 @@ namespace Roguelike
             var cards = new List<RewardCard>();
             for (int i = 0; i < count; i++)
             {
+                if (nodeReward == RunRewardKind.Relics)
+                {
+                    var relic = RelicPool(run).Where(r => cards.All(c => c.relic != r)).RandomElementWithFallback();
+                    if (relic != null) { cards.Add(new RewardCard { kind = RewardKind.Relic, relic = relic }); continue; }
+                }
                 var card = nodeReward == RunRewardKind.Recruits || Rand.Chance(RecruitChanceInStandardPool)
                     ? new RewardCard { kind = RewardKind.Recruit, recruit = GenerateRecruit() }
                     : RandomNonRecruit(run, cards);

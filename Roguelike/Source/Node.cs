@@ -20,7 +20,7 @@ namespace Roguelike
     }
 
     /// <summary>Expedition: build up a camp under a clock. Combat nodes: kill the enemy. Escort: keep someone alive. Event: a choice, no map.</summary>
-    public enum NodeKind { Expedition, CombatAlerted, CombatUnaware, Escort, Event }
+    public enum NodeKind { Expedition, CombatAlerted, CombatUnaware, Escort, Event, Elite, Rest, Merchant, Treasure }
 
     public enum ObjectiveKind { Stockpile, Survive, Build, KillAll, Escort }
 
@@ -56,7 +56,11 @@ namespace Roguelike
         /// <summary>Day enemy reinforcements arrive; 0 for none.</summary>
         public float reinforcementDays;
 
-        public bool HasMap => kind != NodeKind.Event;
+        /// <summary>Event, rest, merchant and treasure nodes resolve on the world map.</summary>
+        public bool HasMap => kind is not (NodeKind.Event or NodeKind.Rest or NodeKind.Merchant or NodeKind.Treasure);
+
+        /// <summary>For rest and treasure nodes: the fixed event to open (otherwise a random pooled event).</summary>
+        public RoguelikeEventDef eventDef;
 
         public string ObjectiveText => objective switch
         {
@@ -72,10 +76,10 @@ namespace Roguelike
         {
             get
             {
-                if (kind == NodeKind.Event) return description + "\n\nA choice awaits when your caravan arrives. No map, no clock.";
+                if (!HasMap) return description + "\n\nResolves when your caravan arrives. No map, no clock.";
                 var sb = new StringBuilder(description);
                 sb.Append($"\n\nObjective: {ObjectiveText}.");
-                if (kind == NodeKind.CombatAlerted) sb.Append(" The enemy knows you're here and attacks at once.");
+                if (kind is NodeKind.CombatAlerted or NodeKind.Elite) sb.Append(" The enemy knows you're here and attacks at once.");
                 if (kind == NodeKind.CombatUnaware) sb.Append(" The enemy camp hasn't spotted you yet: scout and prepare, then strike.");
                 if (patrolIntervalDays > 0f) sb.Append($" Enemy patrols raid about every {patrolIntervalDays:0.#} days.");
                 if (reinforcementDays > 0f) sb.Append($" Enemy reinforcements arrive on day {reinforcementDays:0.#}.");
@@ -281,6 +285,7 @@ namespace Roguelike
             switch (p.kind)
             {
                 case NodeKind.CombatAlerted:
+                case NodeKind.Elite:
                     PickEnemyFaction();
                     SpawnRaid(1f);
                     break;
@@ -366,6 +371,8 @@ namespace Roguelike
                 forced = true,
             };
             if (label != null) parms.customLetterLabel = label;
+            // Some factions need more points than our floor to field any group at all.
+            parms.points = Mathf.Max(parms.points, enemyFaction.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) * 1.1f);
             bool ok = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
             if (!ok)
             {
@@ -373,6 +380,12 @@ namespace Roguelike
                 parms.raidStrategy = null;
                 parms.raidArrivalMode = null;
                 ok = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
+            }
+            if (!ok)
+            {
+                // Last resort: any other hostile faction.
+                parms.faction = Find.FactionManager.RandomEnemyFaction(allowNonHumanlike: false);
+                ok = parms.faction != null && IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
             }
             if (ok)
             {
@@ -386,16 +399,32 @@ namespace Roguelike
         /// <summary>An enemy camp on the far side of the map that defends its position until engaged.</summary>
         private void SpawnCamp()
         {
-            var parms = new PawnGroupMakerParms
+            // Not every hostile faction can field a combat group; try others so the node is always winnable.
+            var candidates = new[] { enemyFaction }.Concat(Find.FactionManager.AllFactionsListForReading
+                .Where(f => f != enemyFaction && !f.IsPlayer && !f.Hidden && !f.defeated && f.def.humanlikeFaction && f.HostileTo(Faction.OfPlayer)).InRandomOrder());
+            List<Pawn> pawns = null;
+            foreach (var faction in candidates)
             {
-                groupKind = PawnGroupKindDefOf.Combat,
-                tile = map.Tile,
-                faction = enemyFaction,
-                points = RaidPoints(1f),
-                generateFightersOnly = true,
-            };
-            var pawns = PawnGroupMakerUtility.GeneratePawns(parms).ToList();
-            if (pawns.Count == 0) return;
+                if (faction == null) continue;
+                var parms = new PawnGroupMakerParms
+                {
+                    groupKind = PawnGroupKindDefOf.Combat,
+                    tile = map.Tile,
+                    faction = faction,
+                    points = Mathf.Max(RaidPoints(1f), faction.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) * 1.1f),
+                    generateFightersOnly = true,
+                };
+                pawns = PawnGroupMakerUtility.GeneratePawns(parms, warnOnZeroResults: false).ToList();
+                if (pawns.Count == 0) continue;
+                enemyFaction = faction;
+                break;
+            }
+            if (pawns == null || pawns.Count == 0)
+            {
+                Log.Warning("[Roguelike] No faction could field a camp; sending a raid instead.");
+                SpawnRaid(1f);
+                return;
+            }
             var colonists = map.mapPawns.FreeColonistsSpawned.Select(c => c.Position).ToList();
             var center = colonists.Count > 0 ? colonists[0] : map.Center;
             if (!CellFinder.TryFindRandomCell(map, c => c.Standable(map) && !c.Roofed(map) && c.DistanceTo(center) > map.Size.x * 0.45f
