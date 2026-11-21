@@ -92,6 +92,41 @@ namespace Roguelike
             GUI.color = old;
         }
 
+        /// <summary>
+        /// A card in the mod's style: shadow, coloured aura, gradient body, frame and a banner. Selected cards get a gold
+        /// frame and a strong breathing aura. Returns the area below the banner for the card's content.
+        /// </summary>
+        public static Rect CardFrame(Rect r, Color kind, float hover, bool selected, string banner, float phase = 0f)
+        {
+            Tex(new Rect(r.x + 8f, r.y + 16f, r.width, r.height).ExpandedBy(16f), SoftGlow, new Color(0f, 0f, 0f, 0.65f));
+            float aura = selected ? 0.45f + 0.2f * Pulse(2.6f, phase) : 0.1f + 0.35f * hover;
+            var auraColor = selected ? Gold : kind;
+            GlowAround(r, new Color(auraColor.r, auraColor.g, auraColor.b, aura), 1.25f, SoftGlow);
+            Tex(r, CardBody, Color.white);
+            Box(r, new Color(kind.r, kind.g, kind.b, 0.05f + 0.05f * hover));
+            var frame = selected ? Gold : Color.Lerp(kind * 0.8f, Color.white, 0.3f * hover);
+            Border(r, new Color(frame.r, frame.g, frame.b, 1f), selected ? 3f : 2f);
+            Border(r.ContractedBy(5f), new Color(kind.r, kind.g, kind.b, 0.22f), 1f);
+            var b = new Rect(r.x + 2f, r.y + 2f, r.width - 4f, 26f);
+            Box(b, new Color(kind.r * 0.45f, kind.g * 0.45f, kind.b * 0.45f, 0.95f));
+            Tex(b, BannerFade, new Color(kind.r, kind.g, kind.b, 0.55f));
+            var font = Text.Font;
+            var anchor = Text.Anchor;
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            ShadowLabel(b, banner.ToUpperInvariant(), new Color(1f, 0.97f, 0.9f));
+            Text.Font = font;
+            Text.Anchor = anchor;
+            return new Rect(r.x + 10f, b.yMax + 6f, r.width - 20f, r.yMax - b.yMax - 14f);
+        }
+
+        /// <summary>The dimmed, vignetted backdrop behind full-screen screens.</summary>
+        public static void Backdrop(Rect r, float alpha)
+        {
+            Box(r, new Color(0.02f, 0.02f, 0.025f, 0.82f * alpha));
+            Tex(r.ExpandedBy(r.width * 0.12f), Vignette, new Color(0f, 0f, 0f, 0.9f * alpha));
+        }
+
         /// <summary>A button in the mod's style: dark body, accent tint and border, glow on hover.</summary>
         public static bool Button(Rect r, string label, Color accent, bool active = true)
         {

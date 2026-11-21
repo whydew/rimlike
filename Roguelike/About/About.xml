@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>Roguelike (prototype)</name>
+  <name>Rimlike: Roguelike Runs</name>
   <author>Matt</author>
   <packageId>matt.roguelike</packageId>
-  <modVersion>0.0.1</modVersion>
+  <modVersion>0.1.0</modVersion>
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
-  <description>Throwaway prototype of the roguelike node loop: enter a fresh node map, fill a stockpile quota while the weather keeps getting worse, then leave instantly with only what you can carry.
+  <description>Turns RimWorld into a squad roguelike. A run is three acts of nodes laid out across the planet: pick a path, land your squad, and build a real colony for each node's objective before its weather turns deadly. Raid camps, escort refugees, assault enemy bases, rest, trade and loot along the way.
 
-Start a new game with the "Roguelike run" scenario and pick a starting node on the world map. Requires Harmony.</description>
+- Card picks after every node: relics, gear, implants, blueprints, research and recruits.
+- Base-building expeditions sized to weeks of play, with weather that worsens faster while you fall behind.
+- Leave with only what your squad can carry, then teleport straight into the next node.
+- Meta progression: points unlock new starters, pool additions and bonuses; Ascension levels stack handicaps.
+- Starters for Royalty, Ideology, Biotech (one per xenotype) and Anomaly, all optional.
+
+Start with New colony and pick a starter. Requires Harmony. Disable the mod to play standard RimWorld.</description>
   <modDependencies>
     <li>
       <packageId>brrainz.harmony</packageId>

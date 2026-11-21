@@ -335,26 +335,30 @@ namespace Roguelike
                 if (node.preset.HasMap)
                 {
                     // Pack within the carry limit, then go straight to the chosen node.
-                    yield return () => Find.WindowStack.WindowOfType<Dialog_FormCaravan>() != null;
-                    var packing = Find.WindowStack.WindowOfType<Dialog_FormCaravan>();
+                    yield return () => Find.WindowStack.WindowOfType<Dialog_Packing>() != null;
+                    var packing = Find.WindowStack.WindowOfType<Dialog_Packing>();
                     if (!shotPacking)
                     {
                         shotPacking = true;
+                        packing.Essentials();
                         foreach (var w in Screenshot("s6_packing", world: false)) yield return w;
+                        // Nothing gets past the carry limit, whatever is clicked.
+                        foreach (var g in packing.Groups.OrderByDescending(g => g.unitMass * g.available).Take(5)) packing.Set(g, g.available);
+                        SelfTest.Check(packing.MassUsage <= packing.MassCapacity + 0.01f, $"node {node.id}: packing never exceeds the carry limit ({packing.MassUsage:0}/{packing.MassCapacity:0} kg, {packing.Groups.Count} kinds of things)");
+                        packing.MostValuable();
+                        SelfTest.Check(packing.MassUsage <= packing.MassCapacity + 0.01f && packing.Groups.Any(g => g.chosen > 0), $"node {node.id}: 'most valuable' fills the packs within the limit");
                         // Backing out of packing returns to the next-node choice.
-                        SelfTest.Check(packing.doCloseX && packing.closeOnCancel, $"node {node.id}: packing can be cancelled");
                         packing.Close();
                         yield return () => PathWindow != null;
-                        SelfTest.Check(run.NodeById(node.id).state == RunNodeState.Completed && nextNode.state == RunNodeState.Available, $"node {node.id}: cancelling packing brings back the next-node cards");
+                        SelfTest.Check(run.NodeById(node.id).state == RunNodeState.Completed && nextNode.state == RunNodeState.Available, $"node {node.id}: backing out of packing brings back the next-node cards");
                         PathWindow.Pick(PathWindow.Cards.ToList().FindIndex(c => c.pathNode == nextNode));
-                        yield return () => Find.WindowStack.WindowOfType<Dialog_FormCaravan>() != null;
-                        packing = Find.WindowStack.WindowOfType<Dialog_FormCaravan>();
+                        yield return () => Find.WindowStack.WindowOfType<Dialog_Packing>() != null;
+                        packing = Find.WindowStack.WindowOfType<Dialog_Packing>();
                     }
-                    var tr = Traverse.Create(packing);
-                    SelfTest.Info($"packing: mass {tr.Property("MassUsage").GetValue<float>():0}/{tr.Property("MassCapacity").GetValue<float>():0} kg, pawns {TransferableUtility.GetPawnsFromTransferables(tr.Field("transferables").GetValue<List<TransferableOneWay>>()).Count}");
-                    bool formed = (bool)AccessTools.Method(typeof(Dialog_FormCaravan), "TryReformCaravan").Invoke(packing, null);
-                    SelfTest.Check(formed, $"node {node.id}: the squad packs up within the carry limit");
-                    packing.Close(false);
+                    packing.Essentials();
+                    var food = packing.Groups.Where(g => g.category == Dialog_Packing.Category.Food).Sum(g => g.chosen);
+                    SelfTest.Info($"packing: mass {packing.MassUsage:0}/{packing.MassCapacity:0} kg, pawns {packing.Pawns.Count}, food items {food}");
+                    SelfTest.Check(packing.Depart(), $"node {node.id}: the squad packs up within the carry limit");
                 }
 
                 if (nextNode.preset.HasMap)
@@ -930,8 +934,27 @@ namespace Roguelike
             yield return Ticks(1500);
             SelfTest.Check(!Find.LetterStack.LettersListForReading.Any(l => l.def == LetterDefOf.GameEnded), "vanilla game-over is suppressed once the run is over");
 
+            // The main menu's "New colony" opens the vanilla scenario page; the starter cards replace it.
+            Find.WindowStack.Add(new Page_SelectScenario());
+            SelfTest.Check(Find.WindowStack.WindowOfType<Page_RoguelikeScenario>() != null && Find.WindowStack.WindowOfType<Page_SelectScenario>() == null, "new colony: the starter cards replace the vanilla scenario list");
+            Find.WindowStack.WindowOfType<Page_RoguelikeScenario>()?.Close(false);
+            yield return Frames(10);
+
+            // New run opens the starter cards; pick a different starter than last time.
+            MetaProgress.S.unlocked.Add("Roguelike_Unlock_TribalHunters");
+            ScenarioLister.MarkDirty();
             NewRun.Start();
+            yield return () => Current.ProgramState == ProgramState.Entry && Find.WindowStack.WindowOfType<Page_RoguelikeScenario>() != null;
+            var scenarioPage = Find.WindowStack.WindowOfType<Page_RoguelikeScenario>();
+            yield return Frames(30);
+            var tribal = scenarioPage.Scenarios.FirstOrDefault(sc => Page_RoguelikeScenario.Part(sc)?.starterId == "tribalHunters");
+            SelfTest.Check(scenarioPage.Scenarios.Count >= 2 && tribal != null, $"new run: the starter cards list every available starter ({string.Join(", ", scenarioPage.Scenarios.Select(Page_RoguelikeScenario.DisplayName))})");
+            SelfTest.Check(scenarioPage.Selected != null && scenarioPage.Selected != tribal, $"new run: last run's starter is preselected ({(scenarioPage.Selected == null ? "none" : Page_RoguelikeScenario.DisplayName(scenarioPage.Selected))})");
+            scenarioPage.Selected = tribal;
+            foreach (var w in Screenshot("s7_starters", world: false)) yield return w;
+            AccessTools.Method(typeof(Page_RoguelikeScenario), "DoNext").Invoke(scenarioPage, null);
             yield return () => Current.ProgramState == ProgramState.Entry && Find.WindowStack.WindowOfType<Page_SelectStartingSite>() != null;
+            SelfTest.Check(Find.Scenario == tribal, "new run: the chosen starter is set up");
             yield return Frames(60);
             var newRun = WorldComponent_RoguelikeRun.Get;
             SelfTest.Check(Find.World.info.seedString == seed, $"new run: same world seed ({seed})");
@@ -941,6 +964,8 @@ namespace Roguelike
 
             // Click through the remaining setup pages.
             var startTile = newRun.Row(0).First().tile;
+            Ideo chosenIdeo = null;
+            List<Pawn> chosenPawns = null;
             for (int i = 0; i < 12 && Current.ProgramState != ProgramState.Playing; i++)
             {
                 var box = Find.WindowStack.WindowOfType<Dialog_MessageBox>();
@@ -954,6 +979,25 @@ namespace Roguelike
                 var page = Find.WindowStack.Windows.OfType<Page>().LastOrDefault();
                 if (page == null) { yield return Frames(30); continue; }
                 if (page is Page_SelectStartingSite) Find.WorldInterface.SelectedTile = startTile;
+                if (page is Page_RoguelikeIdeo ideoPage)
+                {
+                    yield return Frames(30);
+                    SelfTest.Check(ideoPage.Options.Count == 3 && ideoPage.Options.Select(o => o.name).Distinct().Count() == 3, $"new run: three ideoligion cards ({string.Join(", ", ideoPage.Options.Select(o => o.name))})");
+                    SelfTest.Check(!(bool)AccessTools.Method(typeof(Page_RoguelikeIdeo), "CanDoNext").Invoke(ideoPage, null), "new run: an ideoligion must be picked");
+                    ideoPage.Selected = 1;
+                    chosenIdeo = ideoPage.Options[1];
+                    foreach (var w in Screenshot("s7_ideo", world: false)) yield return w;
+                }
+                if (page is Page_RoguelikePawns pawnPage)
+                {
+                    yield return Frames(30);
+                    SelfTest.Check(pawnPage.Pawns.Count == 10, $"new run: ten candidate colonists ({pawnPage.Pawns.Count}), up to {pawnPage.MaxPick} can go");
+                    for (int k = 0; k < pawnPage.Pawns.Count; k++) if (k % 3 == 0) pawnPage.Toggle(pawnPage.Pawns[k]);
+                    SelfTest.Check(pawnPage.Picked.Count == Math.Min(pawnPage.MaxPick, 4), $"new run: picking is capped at {pawnPage.MaxPick} ({pawnPage.Picked.Count} picked)");
+                    pawnPage.Toggle(pawnPage.Picked.Last());
+                    chosenPawns = pawnPage.Picked.ToList();
+                    foreach (var w in Screenshot("s7_pawns", world: false)) yield return w;
+                }
                 SelfTest.Info("setup page: " + page.GetType().Name);
                 if ((bool)AccessTools.Method(page.GetType(), "CanDoNext").Invoke(page, null))
                     AccessTools.Method(page.GetType(), "DoNext").Invoke(page, null);
@@ -964,6 +1008,9 @@ namespace Roguelike
             var started = WorldComponent_RoguelikeRun.Get;
             SelfTest.Check(started is { active: true, RunOver: false } && started.CurrentNode?.tile == startTile, "new run: landed on the chosen starting node");
             SelfTest.Check(NodeComp(Find.CurrentMap) is { Active: true }, "new run: the starting node's objective is running");
+            var colonists = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.ToList();
+            SelfTest.Check(chosenPawns != null && colonists.Count == chosenPawns.Count && chosenPawns.All(colonists.Contains), $"new run: exactly the chosen colonists landed ({colonists.Count})");
+            SelfTest.Check(!ModsConfig.IdeologyActive || Faction.OfPlayer.ideos.PrimaryIdeo == chosenIdeo, $"new run: the chosen ideoligion is the colony's ({Faction.OfPlayer.ideos.PrimaryIdeo?.name})");
         }
 
         /// <summary>Meteors with aftermath, tornadoes, the hurricane and the flood, on debug nodes.</summary>
@@ -1106,7 +1153,7 @@ namespace Roguelike
             foreach (var p in squad) p.skills.GetSkill(SkillDefOf.Plants).Level = 3;
             report = garden.Eligible(run, start.tile, squad);
             SelfTest.Check(!report.Accepted && (report.Reason.ToLowerInvariant().Contains("plants") || report.Reason.Contains("growing")), $"medicinal garden needs a skilled grower ({report.Reason})");
-            squad[0].skills.GetSkill(SkillDefOf.Plants).Level = 10;
+            squad.First(p => !p.skills.GetSkill(SkillDefOf.Plants).TotallyDisabled).skills.GetSkill(SkillDefOf.Plants).Level = 10;
             int twelfths = GenTemperature.TwelfthsInAverageTemperatureRange(start.tile, 6f, 42f).Count;
             SelfTest.Check(garden.Eligible(run, start.tile, squad).Accepted == (twelfths >= garden.growingTwelfths),
                 $"with a skilled grower it depends only on the season ({twelfths} growing twelfths here)");

@@ -1,6 +1,6 @@
 # Generates one badge icon per unlock into Textures/Roguelike/Unlocks/<name>.png, where <name> is the UnlockDef's
 # defName without "Roguelike_Unlock_". Each badge is tinted by kind (starter green, pool blue, bonus gold) and carries
-# its own glyph. Re-run after adding an unlock:
+# its own glyph. Free starters with no unlock use Starter_<starterId>. Re-run after adding an unlock:
 #   powershell -ExecutionPolicy Bypass -File Tools\make-unlock-icons.ps1
 Add-Type -AssemblyName System.Drawing
 $out = Join-Path $PSScriptRoot "..\Textures\Roguelike\Unlocks"
@@ -15,6 +15,7 @@ $kinds = @{
 
 # name -> kind, glyph (Segoe UI Symbol code point)[, font size for thin glyphs]
 $icons = [ordered]@{
+    Starter_crashlanded = 'Starter', 0x1F680  # rocket: the free crashlanded starter (no unlock)
     VampireCoven    = 'Starter', 0x1F377  # wine glass: the hemogen chalice
     Burrowers       = 'Starter', 0x26CF   # pick
     ThinkTank       = 'Starter', 0x1F4A1  # light bulb

@@ -8,8 +8,8 @@ using Verse;
 namespace Roguelike
 {
     /// <summary>
-    /// "New run" from the end-of-run screen: back to the main menu, then straight to the landing screen of a
-    /// freshly generated copy of the same world (same seed and settings), with the same starter and storyteller.
+    /// "New run" from the end-of-run screen: back to the main menu, pick a starter (the last one is preselected), then
+    /// straight to the landing screen of a freshly generated copy of the same world, with the same storyteller.
     /// The new run's act graph is laid out again during world generation.
     /// </summary>
     public static class NewRun
@@ -56,16 +56,21 @@ namespace Roguelike
             GenScene.GoToMainMenu();
         }
 
-        /// <summary>Called in the main menu scene: set up the game and jump to the page after world creation.</summary>
+        /// <summary>Called in the main menu scene: choose the starter, then set up the game on the same world.</summary>
         internal static void Begin()
         {
             var p = pending;
             pending = null;
             if (p == null) return;
+            Find.WindowStack.Add(new Page_RoguelikeScenario { preselect = p.scenario.scenario, onChosen = scenario => Configure(p, scenario) });
+        }
 
+        /// <summary>Set up the game with the chosen starter and jump to the page after world creation.</summary>
+        private static void Configure(Pending p, Scenario scenario)
+        {
             Game.ClearCaches();
             Current.Game = new Game { InitData = new GameInitData() };
-            Current.Game.Scenario = p.scenario.scenario;
+            Current.Game.Scenario = scenario;
             Current.Game.Scenario.PreConfigure();
             Find.GameInitData.startedFromEntry = true;
             Current.Game.storyteller = new Storyteller(p.storyteller, p.difficultyDef, p.difficulty);

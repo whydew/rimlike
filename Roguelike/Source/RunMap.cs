@@ -220,29 +220,15 @@ namespace Roguelike
             var fromMap = Current.Game.FindMap(from.tile);
             if (fromMap != null && fromMap.mapPawns.FreeColonistsSpawnedCount > 0)
             {
-                // The packing screen hands itself to the world route planner if opened from the world view; show the map first.
                 CameraJumper.TryJump(new GlobalTargetInfo(fromMap.Center, fromMap));
-                var packing = new Dialog_FormCaravan(fromMap, reform: true, onClosed: () =>
-                {
-                    var caravan = Find.WorldObjects.Caravans.FirstOrDefault(c => c.IsPlayerControlled && c.Tile == from.tile);
-                    if (caravan == null)
+                var packing = new Dialog_Packing(fromMap, (to.IsBoss ? "Boss: " : "") + to.preset.LabelCap, NodeIcons.For(to),
+                    onDeparted: caravan =>
                     {
-                        // Packing was cancelled: ask again.
-                        pendingPickNodeId = from.id;
-                        return;
-                    }
-                    Letter_NodeComplete.AbandonIfEmpty(fromMap);
-                    RunNodeMarker.GoTo(caravan, marker);
-                }, mapAboutToBeRemoved: true);
-                // Since 1.6 the caravan screen first hands off to the world route planner; nodes are entered directly, so skip
-                // that step: mark the window as already opened and load its item list ourselves.
-                var dialog = HarmonyLib.Traverse.Create(packing);
-                dialog.Field("thisWindowInstanceEverOpened").SetValue(true);
-                dialog.Field("canChooseRoute").SetValue(false); // no route to pick: the destination is the chosen node
-                // The whole squad must leave (pawns are read-only), so vanilla hides Cancel; the X and Escape go back to the node choice.
-                packing.doCloseX = true;
-                packing.closeOnCancel = true;
-                HarmonyLib.AccessTools.Method(typeof(Dialog_FormCaravan), "CalculateAndRecacheTransferables").Invoke(packing, null);
+                        Letter_NodeComplete.AbandonIfEmpty(fromMap);
+                        RunNodeMarker.GoTo(caravan, marker);
+                    },
+                    // Backing out returns to the next-node choice.
+                    onCancelled: () => pendingPickNodeId = from.id);
                 Find.WindowStack.Add(packing);
                 return;
             }
