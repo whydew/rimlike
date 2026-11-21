@@ -953,14 +953,13 @@ namespace Roguelike
             scenarioPage.Selected = tribal;
             foreach (var w in Screenshot("s7_starters", world: false)) yield return w;
             AccessTools.Method(typeof(Page_RoguelikeScenario), "DoNext").Invoke(scenarioPage, null);
-            yield return () => Current.ProgramState == ProgramState.Entry && Find.WindowStack.WindowOfType<Page_SelectStartingSite>() != null;
+            yield return () => Current.ProgramState == ProgramState.Entry && Find.WindowStack.WindowOfType<Page_RoguelikeLanding>() != null;
             SelfTest.Check(Find.Scenario == tribal, "new run: the chosen starter is set up");
             yield return Frames(60);
             var newRun = WorldComponent_RoguelikeRun.Get;
             SelfTest.Check(Find.World.info.seedString == seed, $"new run: same world seed ({seed})");
             SelfTest.Check(newRun is { active: true, RunOver: false } && newRun.nodes.Count == 15 * WorldComponent_RoguelikeRun.ActsPerRun && newRun.Row(0).All(n => n.state == RunNodeState.Available),
                 "new run: a fresh act is laid out and the starting nodes are open");
-            foreach (var w in Screenshot("s5_newrun_landing", world: false)) yield return w;
 
             // Click through the remaining setup pages.
             var startTile = newRun.Row(0).First().tile;
@@ -978,7 +977,15 @@ namespace Roguelike
                 }
                 var page = Find.WindowStack.Windows.OfType<Page>().LastOrDefault();
                 if (page == null) { yield return Frames(30); continue; }
-                if (page is Page_SelectStartingSite) Find.WorldInterface.SelectedTile = startTile;
+                if (page is Page_RoguelikeLanding landing)
+                {
+                    yield return Frames(30);
+                    SelfTest.Check(landing.Starts.Count == newRun.Row(0).Count() && Find.WindowStack.WindowOfType<Page_SelectStartingSite>() == null, $"new run: the landing page shows the {landing.Starts.Count} starting nodes as cards");
+                    SelfTest.Check(!(bool)AccessTools.Method(typeof(Page_RoguelikeLanding), "CanDoNext").Invoke(landing, null), "new run: a starting node must be picked");
+                    SelfTest.Check(landing.Starts.Select(n => n.preset).Distinct().Count() == landing.Starts.Count, $"new run: the starting nodes are all different ({string.Join(", ", landing.Starts.Select(n => n.preset.label))})");
+                    landing.Selected = landing.Starts.ToList().FindIndex(n => n.tile == startTile);
+                    foreach (var w in Screenshot("s7_landing", world: false)) yield return w;
+                }
                 if (page is Page_RoguelikeIdeo ideoPage)
                 {
                     yield return Frames(30);

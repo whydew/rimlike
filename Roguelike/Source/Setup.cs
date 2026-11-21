@@ -23,6 +23,7 @@ namespace Roguelike
                 Page_SelectScenario => new Page_RoguelikeScenario(),
                 Page_ChooseIdeoPreset when window.GetType() == typeof(Page_ChooseIdeoPreset) => new Page_RoguelikeIdeo(),
                 Page_ConfigureStartingPawns when window.GetType() == typeof(Page_ConfigureStartingPawns) => new Page_RoguelikePawns(),
+                Page_SelectStartingSite when window.GetType() == typeof(Page_SelectStartingSite) && ScenPart_RoguelikeRun.ActiveInCurrentScenario => new Page_RoguelikeLanding(),
                 _ => null,
             };
             if (replacement == null || window is not Page old) return;
@@ -60,11 +61,14 @@ namespace Roguelike
 
         protected abstract void DrawContent(Rect area);
 
+        /// <summary>How dark the backdrop gets; lower lets the world show through.</summary>
+        protected virtual float BackdropAlpha => 1f;
+
         public override void DoWindowContents(Rect inRect)
         {
             if (openedAt < 0f) openedAt = Style.Now;
             float t = Age;
-            Style.Backdrop(inRect, Style.EaseOutCubic(t / 0.35f));
+            Style.Backdrop(inRect, BackdropAlpha * Style.EaseOutCubic(t / 0.35f));
 
             float titleIn = Style.EaseOutCubic((t - 0.05f) / 0.45f);
             var titleRect = new Rect(inRect.x, 38f - (1f - titleIn) * 14f, inRect.width, 44f);
@@ -246,6 +250,91 @@ namespace Roguelike
                 return;
             }
             Page_SelectScenario.BeginScenarioConfiguration(selected, this);
+            base.DoNext();
+        }
+    }
+
+    /// <summary>
+    /// Pick the first node: the starting row of act 1 as path cards (objective, weather, reward), with the planet
+    /// behind. Replaces vanilla's landing-site page during a run.
+    /// </summary>
+    public class Page_RoguelikeLanding : RoguelikePage
+    {
+        private List<RunNode> starts;
+        private List<RewardCard> cards;
+        private float[] hover, hoverStart;
+        private int selected = -1;
+
+        public IReadOnlyList<RunNode> Starts => starts;
+        public int Selected { get => selected; set => selected = value; }
+
+        public override string PageTitle => "Choose where to land";
+        protected override string Heading => "Choose where to land";
+        protected override string Subheading => "Your first node. The rest of the run branches out from here.";
+        protected override string NextLabel => "Land here";
+        protected override bool NextReady => selected >= 0;
+        protected override float BackdropAlpha => 0.6f;
+
+        public override void PreOpen()
+        {
+            base.PreOpen();
+            starts = WorldComponent_RoguelikeRun.Get?.Row(0).ToList() ?? new List<RunNode>();
+            cards = starts.Select(n => new RewardCard { kind = RewardKind.Path, pathNode = n }).ToList();
+            hover = new float[starts.Count];
+            hoverStart = new float[starts.Count];
+            // Show the planet behind the cards, centred on the starting row.
+            Find.World.renderer.wantedMode = RimWorld.Planet.WorldRenderMode.Planet;
+            Find.WorldInterface.Reset();
+        }
+
+        public override void PostOpen()
+        {
+            base.PostOpen();
+            var middle = starts.Skip(starts.Count / 2).FirstOrDefault();
+            if (middle != null) Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(middle.tile));
+        }
+
+        public override void PostClose()
+        {
+            base.PostClose();
+            Find.World.renderer.wantedMode = RimWorld.Planet.WorldRenderMode.None;
+        }
+
+        protected override void DrawContent(Rect area)
+        {
+            var rects = Grid(area, cards.Count, Mathf.Max(1, cards.Count), new Vector2(Dialog_RewardPick.CardWidth, Dialog_RewardPick.CardHeight), 34f);
+            for (int i = 0; i < cards.Count; i++)
+            {
+                var r = DealIn(rects[i], i, out float alpha);
+                if (alpha <= 0f) continue;
+                bool over = Mouse.IsOver(rects[i]);
+                if (over && hover[i] <= 0.001f) hoverStart[i] = Style.Now;
+                if (Event.current.type == EventType.Repaint) hover[i] = Mathf.MoveTowards(hover[i], over ? 1f : 0f, Time.unscaledDeltaTime * 7f);
+                float h = Style.EaseOutCubic(hover[i]);
+                bool chosen = i == selected;
+                r.y -= 14f * h + (chosen ? 10f : 0f);
+                var old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, alpha * (selected >= 0 && !chosen ? 0.75f : 1f));
+                if (chosen) Style.GlowAround(r, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.45f + 0.2f * Style.Pulse(2.6f)), 1.2f, Style.SoftGlow);
+                Dialog_RewardPick.DrawCard(r, cards[i], h, Style.Now - hoverStart[i], 0f, i);
+                if (chosen) Style.Border(r, Style.Gold, 3f);
+                GUI.color = old;
+                if (Widgets.ButtonInvisible(rects[i]))
+                {
+                    if (selected == i && Event.current.clickCount >= 2 && CanDoNext()) DoNext();
+                    selected = i;
+                    SoundDefOf.Tick_High.PlayOneShotOnCamera();
+                }
+            }
+        }
+
+        protected override bool CanDoNext() => base.CanDoNext() && selected >= 0;
+
+        protected override void DoNext()
+        {
+            var tile = starts[selected].tile;
+            Find.WorldInterface.SelectedTile = tile;
+            Find.GameInitData.startingTile = tile;
             base.DoNext();
         }
     }

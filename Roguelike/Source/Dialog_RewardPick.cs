@@ -17,8 +17,8 @@ namespace Roguelike
     /// </summary>
     public class Dialog_RewardPick : Window
     {
-        private const float CardWidth = 236f;
-        private const float CardHeight = 392f;
+        internal const float CardWidth = 236f;
+        internal const float CardHeight = 392f;
         private const float CardGap = 30f;
         private const float DealDuration = 0.55f;
         private const float DealStagger = 0.11f;
@@ -222,7 +222,7 @@ namespace Roguelike
         private static bool IsRare(RewardCard card) =>
             card.kind == RewardKind.Relic && card.relic.rarity == RelicRarity.Rare || card.kind == RewardKind.Path && card.pathNode.IsBoss;
 
-        private static void DrawCard(Rect r, RewardCard card, float hover, float hoverAge, float flash, int index)
+        internal static void DrawCard(Rect r, RewardCard card, float hover, float hoverAge, float flash, int index)
         {
             float a = GUI.color.a;
             var kind = card.KindColor;
@@ -270,7 +270,9 @@ namespace Roguelike
             Text.Font = GameFont.Tiny;
             var old = GUI.color;
             GUI.color = new Color(0.88f, 0.86f, 0.8f, a);
-            Widgets.Label(body, BodyText(card));
+            string text = BodyText(card);
+            Widgets.Label(body, text);
+            if (Text.CalcHeight(text, body.width) > body.height) TooltipHandler.TipRegion(r, text); // full text when it doesn't fit
             GUI.color = old;
             Text.Font = GameFont.Small;
 

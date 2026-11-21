@@ -561,6 +561,10 @@ namespace Roguelike
                 if (placeable.Count > 0) pool = placeable;
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
                 var options = fitting.Count > 0 ? fitting : pool;
+                // Nodes side by side in a row are real alternatives: avoid repeating a sibling's objective when possible.
+                var taken = nodes.Where(o => o != n && o.act == n.act && o.row == n.row && o.preset != null).Select(o => o.preset).ToList();
+                var fresh = options.Where(p => !taken.Contains(p)).ToList();
+                if (fresh.Count > 0) options = fresh;
                 n.preset = options.RandomElementByWeight(p => p.weight);
                 if (n.preset.randomModifier) n.modifier = ModifierPool.PickFor(n.tile);
                 // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
