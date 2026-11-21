@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Roguelike prototype. Build from this folder with:  dotnet build -c Release
+    Output: ..\Assemblies\Roguelike.dll, then the mod (About, Defs, Assemblies)
+    is copied to $(DeployDir) so the game picks it up.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <AssemblyName>Roguelike</AssemblyName>
+    <RootNamespace>Roguelike</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\Assemblies\</OutputPath>
+    <DebugType>none</DebugType>
+    <DeployDir Condition="'$(DeployDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Roguelike</DeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Matches the installed game build (1.7.5005). -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.5005-unstable" ExcludeAssets="runtime" />
+    <!-- Harmony is provided at runtime by the Harmony mod. -->
+    <Reference Include="0Harmony">
+      <HintPath>C:\Program Files (x86)\Steam\steamapps\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="DeployMod" AfterTargets="Build" Condition="'$(DeployDir)' != 'none'">
+    <ItemGroup>
+      <ModFiles Include="..\About\**;..\Defs\**;..\Assemblies\**" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ModFiles)" DestinationFiles="@(ModFiles->'$(DeployDir)\%(RelativeDir)%(Filename)%(Extension)'->Replace('..\', ''))" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

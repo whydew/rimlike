@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Threat modifiers: a temperature offset the node drives over time. -->
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingCold</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingTemperature</conditionClass>
+    <label>deepening cold</label>
+    <description>An unnatural cold has settled over this region. Once it starts, it gets worse every day until you leave.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <GameConditionDef>
+    <defName>Roguelike_EscalatingHeat</defName>
+    <conditionClass>Roguelike.GameCondition_EscalatingTemperature</conditionClass>
+    <label>rising heat</label>
+    <description>An unnatural heat has settled over this region. Once it starts, it gets worse every day until you leave.</description>
+    <allowUnderground>false</allowUnderground>
+  </GameConditionDef>
+
+  <!-- World object that owns a node map. The map is removed once no colonists remain. -->
+  <WorldObjectDef ParentName="StaticWorldObjectBase">
+    <defName>Roguelike_Node</defName>
+    <label>node</label>
+    <description>A roguelike node.</description>
+    <worldObjectClass>Roguelike.RoguelikeNode</worldObjectClass>
+    <texture>World/WorldObjects/Camp</texture>
+    <expandingIcon>true</expandingIcon>
+    <expandingIconTexture>World/WorldObjects/Expanding/Camp</expandingIconTexture>
+    <expandingIconPriority>80</expandingIconPriority>
+    <isTempIncidentMapOwner>true</isTempIncidentMapOwner>
+  </WorldObjectDef>
+
+  <!-- Starting-node choice shown on the world map during landing-site selection. -->
+  <WorldObjectDef ParentName="StaticWorldObjectBase">
+    <defName>Roguelike_StartNode</defName>
+    <label>starting node</label>
+    <description>A place to begin the run. Select it and press Next to land here.</description>
+    <worldObjectClass>Roguelike.StartNodeMarker</worldObjectClass>
+    <texture>World/WorldObjects/JourneyDestination</texture>
+    <expandingIcon>true</expandingIcon>
+    <expandingIconTexture>World/WorldObjects/Expanding/JourneyDestination</expandingIconTexture>
+    <expandingIconPriority>90</expandingIconPriority>
+    <expandMore>true</expandMore>
+    <!-- Must stay true: vanilla refuses to land on tiles holding objects that cannot have a map. -->
+    <canHaveMap>true</canHaveMap>
+  </WorldObjectDef>
+
+  <LetterDef ParentName="PositiveEvent">
+    <defName>Roguelike_NodeComplete</defName>
+    <letterClass>Roguelike.Letter_NodeComplete</letterClass>
+  </LetterDef>
+
+  <!-- Run scenario: Crashlanded, but you land on a chosen starting node. -->
+  <ScenPartDef>
+    <defName>Roguelike_Run</defName>
+    <label>roguelike run</label>
+    <category>Fixed</category>
+    <scenPartClass>Roguelike.ScenPart_RoguelikeRun</scenPartClass>
+    <summaryPriority>900</summaryPriority>
+  </ScenPartDef>
+
+  <ScenarioDef ParentName="Crashlanded">
+    <defName>Roguelike_RunScenario</defName>
+    <label>Roguelike run</label>
+    <description>Three survivors crashland on a starting node of their choosing. Complete each node's objective before its weather turns deadly.</description>
+    <scenario>
+      <summary>Prototype roguelike run: choose a starting node on the world map.</summary>
+      <parts>
+        <li Class="Roguelike.ScenPart_RoguelikeRun">
+          <def>Roguelike_Run</def>
+        </li>
+      </parts>
+    </scenario>
+  </ScenarioDef>
+
+  <!--
+    Tunable presets. Edit these to tune by feel; no recompile needed.
+    graceDays:      days before the weather starts changing.
+    offsetPerDay:   base change per day once it starts (°C; shown in the player's unit).
+    targetDays:     days the objective "should" take; sets the expected pace.
+    paceSensitivity, minPaceFactor, maxPaceFactor: how much being ahead/behind pace
+                    slows or speeds the change (factor = 1 + behindFraction * sensitivity).
+  -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_ColdTest</defName>
+    <label>cold expedition</label>
+    <description>Stockpile the quota before the cold makes the outdoors unlivable.</description>
+    <condition>Roguelike_EscalatingCold</condition>
+    <offsetPerDay>-4</offsetPerDay>
+    <quota>
+      <WoodLog>400</WoodLog>
+      <Steel>150</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_HeatTest</defName>
+    <label>heat expedition</label>
+    <description>Stockpile the quota before the heat makes the outdoors unlivable.</description>
+    <condition>Roguelike_EscalatingHeat</condition>
+    <offsetPerDay>4</offsetPerDay>
+    <quota>
+      <WoodLog>400</WoodLog>
+      <Steel>150</Steel>
+    </quota>
+  </Roguelike.NodePresetDef>
+
+</Defs>

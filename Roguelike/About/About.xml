@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Roguelike (prototype)</name>
+  <author>Matt</author>
+  <packageId>matt.roguelike</packageId>
+  <modVersion>0.0.1</modVersion>
+  <supportedVersions>
+    <li>1.7</li>
+  </supportedVersions>
+  <description>Throwaway prototype of the roguelike node loop: enter a fresh node map, fill a stockpile quota while the weather keeps getting worse, then leave instantly with only what you can carry.
+
+Start a new game with the "Roguelike run" scenario and pick a starting node on the world map. Requires Harmony.</description>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>brrainz.harmony</li>
+  </loadAfter>
+</ModMetaData>

@@ -18,7 +18,7 @@ A RimWorld mod that turns the game into a run-based squad roguelike. Structure f
 
 ## Run structure
 
-1. **Start:** pick a starter loadout (see [Starter loadouts](#starter-loadouts)). You get its pawns, its fixed signature relic and a small kit.
+1. **Start:** pick a starter loadout (see [Starter loadouts](#starter-loadouts)). You get its pawns, its fixed signature relic and a small kit. On the landing screen, the first row of nodes shows on the world map; you land on the one you pick, so the first landing is the first node.
 2. **Act map:** a branching node graph ending in a boss, laid out on the RimWorld world map. Each node is a world tile, so its biome comes from the planet. Each node previews its type, objective, threat modifier and reward. Connections between nodes are drawn on the world map. The caravan can only travel to connected next nodes, and travel time costs food, which ties into the carrying rule. Runs reuse the same world and seed; each run places a fresh node graph on it.
 3. **Play the node** (below).
 4. **Win the node:** a letter announces the objective is complete. Acknowledging it ends the node instantly.
@@ -55,6 +55,9 @@ Only what pawns and pack animals can carry, using vanilla caravan mass capacity.
 
 - Each node rolls **one** modifier, chosen to fit its biome, and shown on the map.
 - It **gets stronger over time with no cap**. It does not change into a different type.
+- **Grace period:** it holds off for the first few days of a node.
+- **Pace-driven:** after the grace period, it worsens slower while the player is ahead of the objective's expected pace and faster while they're behind.
+- Temperatures display in the player's chosen unit (°C, °F or K).
 - Examples:
   - **Cold:** starts as a mild snap and ends with instant frostbite outdoors.
   - **Heat:** heatstroke, outdoor work stops, crops wither.
@@ -160,5 +163,24 @@ Each run unlocks a bit more for the next one, through points earned per node cle
 - Simple meta-unlock list.
 - Node length target: 1–2 in-game seasons (about 20–40 min). Tune by feel.
 
+## Roadmap
+
+Each stage ends with a playtest gate; the next stage starts only once the gate passes.
+
+| Stage | Scope | Gate | Status |
+|---|---|---|---|
+| **0. Core node loop** | Pick a starting node on the world map; one weather modifier with grace period and pace-driven ramp; stockpile quota; instant leave on completion | Is one node fun? | ✅ Done (2026-11-21) |
+| **1. Run skeleton** | Run state (act, visited nodes, run over on wipe or failed objective); one act of ~15 nodes in branching rows plus a boss, drawn on the world map; caravan travel limited to connected next nodes; node previews | Does chaining nodes feel like a run? | Next |
+| **2. Rewards and drafting** | Card-pick screen (pick 1 of 3, basic animation); relics (~12), gear, implants, recruits; blueprint drafting limits the build menu | Do drafts make runs feel different? | |
+| **3. Node variety** | Combat (Alerted, Unaware), Event nodes; survive, build, kill and escort (failable) objectives; toxic and psychic modifiers; boss fight | Is a full act replayable? | |
+| **4. Starters and meta** | Crashlanded, Tribal Hunters, Ice Nomads; end-of-run screen; meta points and unlocks stored outside saves. Completes the MVP | Is a new run worth starting? | |
+| **5. Post-MVP** | Ascension; elite, rest, merchant, treasure nodes; acts 2–3; DLC starters; custom meteors and disasters; card art and polish | | |
+
+Biggest risks: blueprint drafting (patching build and research menus), hand-animated card UI, and meta-progression storage outside saves.
+
 ## Open questions
+
+- Should quotas be checked against what the node map can supply? (Playtest 1: the steel quota was met on a map with no mineable steel.)
+
+The core-loop prototype lives in [`Roguelike/`](../Roguelike/README.md).
 
