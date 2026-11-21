@@ -121,6 +121,7 @@ namespace Roguelike
             "win" => Win(),
             "leave" => LeaveEarly(),
             "wipe" => Wipe(),
+            "rewards" => Rewards(),
             _ => Unknown(mode),
         };
 
@@ -154,7 +155,8 @@ namespace Roguelike
         private static IEnumerable<Func<bool>> Screenshot(string name, bool world)
         {
             if (world) CameraJumper.TryShowWorld();
-            yield return Frames(45);
+            float until = UnityEngine.Time.realtimeSinceStartup + 1.5f;
+            yield return () => UnityEngine.Time.realtimeSinceStartup >= until;
             ScreenshotTaker.TakeNonSteamShot("rltest_" + name);
             SelfTest.Info($"screenshot rltest_{name}.png");
             yield return Frames(20);
@@ -255,6 +257,7 @@ namespace Roguelike
                     SelfTest.Check(run.runWon && !run.runLost, "boss cleared: run won");
                     break;
                 }
+                foreach (var w in PickFirstReward(node)) yield return w;
                 SelfTest.Check(node.next.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {node.next.Count} next nodes are available");
 
                 var locked = run.nodes.FirstOrDefault(n => n.state == RunNodeState.Locked);
@@ -290,6 +293,100 @@ namespace Roguelike
             }
             SelfTest.Check(run.runWon, "run ends won");
             foreach (var w in Screenshot("s1_act_won", world: true)) yield return w;
+        }
+
+        private static Dialog_RewardPick RewardWindow => Find.WindowStack.WindowOfType<Dialog_RewardPick>();
+
+        /// <summary>The reward screen opened for <paramref name="node"/>: pick the first card and wait for it to close.</summary>
+        private static IEnumerable<Func<bool>> PickFirstReward(RunNode node)
+        {
+            var window = RewardWindow;
+            if (!SelfTest.Check(window != null && window.Cards.Count >= 3, $"node {node.id}: reward screen opened with {window?.Cards.Count ?? 0} cards")) yield break;
+            if (node.reward == RunRewardKind.Recruits)
+                SelfTest.Check(window.Cards.All(c => c.kind == RewardKind.Recruit), $"node {node.id}: recruit node offers only recruits");
+            yield return Frames(40);
+            window.Pick(0);
+            yield return () => RewardWindow == null;
+            SelfTest.Check(Run.pendingRewardNodeId < 0, $"node {node.id}: reward resolved ({window.Cards[0].KindLabel}: {window.Cards[0].Title})");
+        }
+
+        private static int CountOnMap(Map map, string thingDef) =>
+            map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed(thingDef)).Sum(t => t.stackCount);
+
+        private static bool BuildVisible(string thingDef) => new Designator_Build(DefDatabase<ThingDef>.GetNamed(thingDef)).Visible;
+
+        /// <summary>Card screen, every reward kind, relic effects and the blueprint build-menu gate.</summary>
+        private static IEnumerable<Func<bool>> Rewards()
+        {
+            foreach (var w in WaitForGame()) yield return w;
+            var run = Run;
+            var map = Find.CurrentMap;
+            var node = run.CurrentNode;
+            var colonist = map.mapPawns.FreeColonistsSpawned.First();
+
+            // Build-menu gate.
+            SelfTest.Check(!BuildVisible("Heater"), "un-drafted blueprint building (heater) is hidden from the build menu");
+            SelfTest.Check(BuildVisible("Wall"), "ungated building (wall) stays in the build menu");
+
+            // Reward screen after clearing a node.
+            node.reward = RunRewardKind.Cards;
+            NodeComp(map).Complete();
+            var window = RewardWindow;
+            SelfTest.Check(window != null && window.Cards.Count == 3, $"reward screen shows 3 cards (got {window?.Cards.Count ?? 0})");
+            SelfTest.Check(window != null && window.Cards.All(c => !c.Title.NullOrEmpty() && !Dialog_RewardPick.BodyText(c).NullOrEmpty()), "every card has a title and body text");
+            SelfTest.Check(run.pendingRewardNodeId == node.id, "reward is pending until picked");
+            Find.CameraDriver.JumpToCurrentMapLoc(colonist.Position);
+            foreach (var w in Screenshot("s2_reward_cards", world: false)) yield return w;
+            window.Pick(1);
+            yield return () => RewardWindow == null;
+            SelfTest.Check(run.pendingRewardNodeId < 0, $"picked card resolves the reward ({window.Cards[1].KindLabel}: {window.Cards[1].Title})");
+
+            // Every reward kind applies.
+            var liners = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_InsulatedLiners");
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Relic, relic = liners }, map);
+            SelfTest.Check(run.relics.Contains(liners) && colonist.health.hediffSet.HasHediff(liners.hediff), "hediff relic: owned and colonists get its effect");
+
+            var comp = NodeComp(map);
+            float grace = comp.GraceDays;
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Relic, relic = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_Barometer") }, map);
+            SelfTest.Check(Math.Abs(comp.GraceDays - grace - 1.5f) < 0.01f, $"rule relic: grace {grace:0.0} -> {comp.GraceDays:0.0} days");
+
+            float cap = MassUtility.Capacity(colonist);
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Relic, relic = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_PackFrame") }, map);
+            SelfTest.Check(Math.Abs(MassUtility.Capacity(colonist) - cap * 1.4f) < 0.01f, $"carry relic: colonist capacity {cap:0} -> {MassUtility.Capacity(colonist):0} kg");
+
+            int parkas = CountOnMap(map, "Apparel_Parka");
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Gear, gear = DefDatabase<GearRewardDef>.GetNamed("Roguelike_Gear_Parka") }, map);
+            SelfTest.Check(CountOnMap(map, "Apparel_Parka") == parkas + 1, "gear reward appears next to the squad");
+
+            int meds = CountOnMap(map, "MedicineIndustrial");
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Gear, gear = DefDatabase<GearRewardDef>.GetNamed("Roguelike_Gear_Medicine") }, map);
+            SelfTest.Check(CountOnMap(map, "MedicineIndustrial") == meds + 12, "stacked gear reward delivers the full count");
+
+            int arms = CountOnMap(map, "BionicArm");
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Implant, gear = DefDatabase<GearRewardDef>.GetNamed("Roguelike_Implant_BionicArm") }, map);
+            SelfTest.Check(CountOnMap(map, "BionicArm") == arms + 1, "implant reward appears next to the squad");
+
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Blueprint, blueprint = DefDatabase<BlueprintGroupDef>.GetNamed("Roguelike_BP_Climate") }, map);
+            SelfTest.Check(BuildVisible("Heater") && !BuildVisible("Sandbags"), "drafted blueprint group unlocks only its buildings");
+
+            int colonists = map.mapPawns.FreeColonistsSpawnedCount;
+            var recruit = RewardUtility.GenerateRecruit();
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Recruit, recruit = recruit }, map);
+            SelfTest.Check(map.mapPawns.FreeColonistsSpawnedCount == colonists + 1 && recruit.IsColonist, "recruit joins the squad on the map");
+            yield return Ticks(300);
+            SelfTest.Check(recruit.health.hediffSet.HasHediff(liners.hediff), "newcomers get hediff relic effects too");
+
+            // Recruit-only draw and the recruit card layout.
+            var recruitCards = RewardUtility.Generate(run, RunRewardKind.Recruits);
+            SelfTest.Check(recruitCards.Count == 3 && recruitCards.All(c => c.kind == RewardKind.Recruit && c.recruit != null), "recruit node draw: 3 recruit cards");
+            SelfTest.Check(recruitCards.All(c => Dialog_RewardPick.RecruitSummary(c.recruit).Contains("Skills:") && Dialog_RewardPick.RecruitSummary(c.recruit).Contains("Health:")), "recruit cards list skills and health");
+            Find.WindowStack.Add(new Dialog_RewardPick(recruitCards, "Self-test: recruits", null));
+            foreach (var w in Screenshot("s2_recruit_cards", world: false)) yield return w;
+            RewardWindow.Skip();
+            yield return () => RewardWindow == null;
+            SelfTest.Check(recruitCards.All(c => !c.recruit.Spawned && !c.recruit.IsColonist || c.recruit.Faction == Faction.OfPlayer && !c.recruit.Spawned), "skipped recruits do not join");
+            SelfTest.Info("relics now: " + string.Join(", ", run.relics.Select(r => r.label)));
         }
 
         /// <summary>Leaving the current node before its objective is met ends the run.</summary>

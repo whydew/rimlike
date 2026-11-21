@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===================== Relics =====================
+    Passive run-wide effects. Rule relics change run numbers; hediff relics give every colonist a status effect.
+    starterOnly: signature relics of starter loadouts, never offered as rewards.
+    requiresUnlock: only offered once unlocked through meta-progression.
+  -->
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_BlackBox</defName>
+    <label>Ship's Black Box</label>
+    <description>Recovered from the wreck. One extra choice at every reward screen.</description>
+    <iconThing>ComponentSpacer</iconThing>
+    <starterOnly>true</starterOnly>
+    <extraRewardChoices>1</extraRewardChoices>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_ThermalLining</defName>
+    <label>Thermal Lining</label>
+    <description>Weather modifiers worsen 30% slower.</description>
+    <iconThing>Apparel_Parka</iconThing>
+    <starterOnly>true</starterOnly>
+    <weatherRateFactor>0.7</weatherRateFactor>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_HerdBond</defName>
+    <label>Herd Bond</label>
+    <description>Pack animals heal fully at the start of each node and carry 50% more.</description>
+    <iconThing>Kibble</iconThing>
+    <starterOnly>true</starterOnly>
+    <packAnimalCapacityFactor>1.5</packAnimalCapacityFactor>
+    <healAnimalsOnEnter>true</healAnimalsOnEnter>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_MedKit</defName>
+    <label>Glitterworld Med Kit</label>
+    <description>At the start of each node, cures the worst health condition of one colonist.</description>
+    <iconThing>MedicineUltratech</iconThing>
+    <fixWorstConditionOnEnter>true</fixWorstConditionOnEnter>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_Barometer</defName>
+    <label>Calm Barometer</label>
+    <description>Weather modifiers hold off 1.5 days longer.</description>
+    <iconThing>Silver</iconThing>
+    <graceDaysOffset>1.5</graceDaysOffset>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_Chronometer</defName>
+    <label>Pacing Chronometer</label>
+    <description>Falling behind pace speeds the weather up much less.</description>
+    <iconThing>Gold</iconThing>
+    <maxPaceFactorFactor>0.6</maxPaceFactorFactor>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_PackFrame</defName>
+    <label>Pack Frame</label>
+    <description>Colonists can carry 40% more in caravans.</description>
+    <iconThing>Steel</iconThing>
+    <colonistCapacityFactor>1.4</colonistCapacityFactor>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_InsulatedLiners</defName>
+    <label>Insulated Liners</label>
+    <description>Colonists are comfortable in a 12°C wider temperature range.</description>
+    <iconThing>Cloth</iconThing>
+    <hediff>Roguelike_RelicEffect_InsulatedLiners</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_HardyBoots</defName>
+    <label>Hardy Boots</label>
+    <description>Colonists move faster.</description>
+    <iconThing>Apparel_Pants</iconThing>
+    <hediff>Roguelike_RelicEffect_HardyBoots</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_WorkGloves</defName>
+    <label>Work Gloves</label>
+    <description>Colonists work 15% faster.</description>
+    <iconThing>ComponentIndustrial</iconThing>
+    <hediff>Roguelike_RelicEffect_WorkGloves</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_Painkillers</defName>
+    <label>Painkiller Stash</label>
+    <description>Colonists feel half as much pain.</description>
+    <iconThing>MedicineHerbal</iconThing>
+    <hediff>Roguelike_RelicEffect_Painkillers</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_SteelLungs</defName>
+    <label>Steel Lungs</label>
+    <description>Colonists resist toxic buildup.</description>
+    <iconThing>Chemfuel</iconThing>
+    <hediff>Roguelike_RelicEffect_SteelLungs</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_PsychicDampener</defName>
+    <label>Psychic Dampener</label>
+    <description>Colonists are less sensitive to psychic effects.</description>
+    <iconThing>Jade</iconThing>
+    <hediff>Roguelike_RelicEffect_PsychicDampener</hediff>
+  </Roguelike.RelicDef>
+
+  <!-- Status effects given by hediff relics. -->
+  <HediffDef Name="Roguelike_RelicEffectBase" Abstract="True">
+    <hediffClass>HediffWithComps</hediffClass>
+    <isBad>false</isBad>
+    <defaultLabelColor>(0.85, 0.75, 0.4)</defaultLabelColor>
+    <everCurableByItem>false</everCurableByItem>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_InsulatedLiners</defName>
+    <label>relic: insulated liners</label>
+    <description>A run relic keeps this colonist comfortable in a wider temperature range.</description>
+    <stages><li><statOffsets><ComfyTemperatureMin>-12</ComfyTemperatureMin><ComfyTemperatureMax>12</ComfyTemperatureMax></statOffsets></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_HardyBoots</defName>
+    <label>relic: hardy boots</label>
+    <description>A run relic makes this colonist move faster.</description>
+    <stages><li><statOffsets><MoveSpeed>0.5</MoveSpeed></statOffsets></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_WorkGloves</defName>
+    <label>relic: work gloves</label>
+    <description>A run relic makes this colonist work faster.</description>
+    <stages><li><statOffsets><WorkSpeedGlobal>0.15</WorkSpeedGlobal></statOffsets></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_Painkillers</defName>
+    <label>relic: painkillers</label>
+    <description>A run relic dulls this colonist's pain.</description>
+    <stages><li><painFactor>0.5</painFactor></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_SteelLungs</defName>
+    <label>relic: steel lungs</label>
+    <description>A run relic helps this colonist resist toxic buildup.</description>
+    <stages><li><statOffsets><ToxicResistance>0.5</ToxicResistance></statOffsets></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_PsychicDampener</defName>
+    <label>relic: psychic dampener</label>
+    <description>A run relic makes this colonist less sensitive to psychic effects.</description>
+    <stages><li><statOffsets><PsychicSensitivity>-0.4</PsychicSensitivity></statOffsets></li></stages>
+  </HediffDef>
+
+  <!-- ===================== Gear and implant rewards ===================== -->
+
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_Parka</defName><thing>Apparel_Parka</thing><stuff>Synthread</stuff></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_FlakVest</defName><thing>Apparel_FlakVest</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ReconArmor</defName><thing>Apparel_ArmorRecon</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_AdvHelmet</defName><thing>Apparel_AdvancedHelmet</thing><stuff>Plasteel</stuff></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_AssaultRifle</defName><thing>Gun_AssaultRifle</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ChainShotgun</defName><thing>Gun_ChainShotgun</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_SniperRifle</defName><thing>Gun_SniperRifle</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_HeavySMG</defName><thing>Gun_HeavySMG</thing></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_Longsword</defName><thing>MeleeWeapon_LongSword</thing><stuff>Plasteel</stuff></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_Medicine</defName><thing>MedicineIndustrial</thing><count>12</count></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_Rations</defName><thing>MealSurvivalPack</thing><count>15</count></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ShieldBelt</defName><thing>Apparel_ShieldBelt</thing></Roguelike.GearRewardDef>
+
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicArm</defName><thing>BionicArm</thing><implant>true</implant></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicLeg</defName><thing>BionicLeg</thing><implant>true</implant></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicEye</defName><thing>BionicEye</thing><implant>true</implant></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_Cochlear</defName><thing>CochlearImplant</thing><implant>true</implant></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_PowerClaw</defName><thing>PowerClaw</thing><implant>true</implant></Roguelike.GearRewardDef>
+
+  <!-- ===================== Blueprint groups =====================
+    Buildings listed in any group are hidden from the build menu during a run until that group is drafted.
+    Everything else (walls, doors, beds, campfire, ...) is always available.
+  -->
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Defenses</defName>
+    <label>Defenses</label>
+    <description>Sandbags, barricades, spike traps and mini-turrets.</description>
+    <buildings><li>Sandbags</li><li>Barricade</li><li>TrapSpike</li><li>Turret_MiniTurret</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Climate</defName>
+    <label>Climate control</label>
+    <description>Heaters, coolers, vents and passive coolers.</description>
+    <buildings><li>Heater</li><li>Cooler</li><li>Vent</li><li>PassiveCooler</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Power</defName>
+    <label>Power</label>
+    <description>Generators, solar, wind, batteries, conduits and switches.</description>
+    <buildings><li>WoodFiredGenerator</li><li>SolarGenerator</li><li>WindTurbine</li><li>Battery</li><li>PowerConduit</li><li>PowerSwitch</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Medical</defName>
+    <label>Medical</label>
+    <description>Hospital beds and vitals monitors.</description>
+    <buildings><li>HospitalBed</li><li>VitalsMonitor</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Kitchen</defName>
+    <label>Kitchen</label>
+    <description>Stoves and the nutrient paste dispenser.</description>
+    <buildings><li>FueledStove</li><li>ElectricStove</li><li>NutrientPasteDispenser</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Crafting</defName>
+    <label>Crafting</label>
+    <description>Tailoring benches, smithies, stonecutter's table and smelter.</description>
+    <buildings><li>HandTailoringBench</li><li>ElectricTailoringBench</li><li>FueledSmithy</li><li>ElectricSmithy</li><li>TableStonecutter</li><li>ElectricSmelter</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Farming</defName>
+    <label>Indoor farming</label>
+    <description>Hydroponics basins and sun lamps.</description>
+    <buildings><li>HydroponicsBasin</li><li>SunLamp</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Storage</defName>
+    <label>Storage</label>
+    <description>Shelves.</description>
+    <buildings><li>Shelf</li><li>ShelfSmall</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Comfort</defName>
+    <label>Comfort</label>
+    <description>Armchairs, end tables, dressers and plant pots.</description>
+    <buildings><li>Armchair</li><li>EndTable</li><li>Dresser</li><li>PlantPot</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_Research</defName>
+    <label>Research</label>
+    <description>Research benches.</description>
+    <buildings><li>SimpleResearchBench</li><li>HiTechResearchBench</li></buildings>
+  </Roguelike.BlueprintGroupDef>
+
+</Defs>

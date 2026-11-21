@@ -171,7 +171,7 @@ Each stage ends with a playtest gate; the next stage starts only once the gate p
 |---|---|---|---|
 | **0. Core node loop** | Pick a starting node on the world map; one weather modifier with grace period and pace-driven ramp; stockpile quota; instant leave on completion | Is one node fun? | ✅ Done (2026-11-21) |
 | **1. Run skeleton** | Run state (act, visited nodes, run over on wipe or failed objective); one act of ~15 nodes in branching rows plus a boss, drawn on the world map; caravan travel limited to connected next nodes; node previews | Does chaining nodes feel like a run? | ✅ Done (2026-11-21, in-game self-test) |
-| **2. Rewards and drafting** | Card-pick screen (pick 1 of 3, basic animation); relics (~12), gear, implants, recruits; blueprint drafting limits the build menu | Do drafts make runs feel different? | |
+| **2. Rewards and drafting** | Card-pick screen (pick 1 of 3, basic animation); relics (~12), gear, implants, recruits; blueprint drafting limits the build menu | Do drafts make runs feel different? | ✅ Done (2026-11-21, in-game self-test) |
 | **3. Node variety** | Combat (Alerted, Unaware), Event nodes; survive, build, kill and escort (failable) objectives; toxic and psychic modifiers; boss fight | Is a full act replayable? | |
 | **4. Starters and meta** | Crashlanded, Tribal Hunters, Ice Nomads; end-of-run screen; meta points and unlocks stored outside saves. Completes the MVP | Is a new run worth starting? | |
 | **5. Post-MVP** | Ascension; elite, rest, merchant, treasure nodes; acts 2–3; DLC starters; custom meteors and disasters; card art and polish | | |

@@ -13,6 +13,9 @@ namespace Roguelike
     /// <summary>Locked: not reachable yet. Available: can be entered next. Skipped: a sibling was chosen instead.</summary>
     public enum RunNodeState { Locked, Available, Current, Completed, Skipped }
 
+    /// <summary>What clearing the node offers: a mixed card draw, recruits only, or nothing (boss).</summary>
+    public enum RunRewardKind { Cards, Recruits, None }
+
     /// <summary>One node of the act graph.</summary>
     public class RunNode : IExposable
     {
@@ -22,10 +25,18 @@ namespace Roguelike
         public PlanetTile tile = PlanetTile.Invalid;
         public RunNodeType type;
         public RunNodeState state;
+        public RunRewardKind reward;
         public NodePresetDef preset;
         public List<int> next = new List<int>();
 
         public bool IsBoss => type == RunNodeType.Boss;
+
+        public string RewardText => reward switch
+        {
+            RunRewardKind.Recruits => "Reward: choose 1 of 3 recruits.",
+            RunRewardKind.Cards => "Reward: choose 1 of 3 cards (relic, gear, implant or blueprint).",
+            _ => "Reward: clears the act.",
+        };
 
         public void ExposeData()
         {
@@ -35,6 +46,7 @@ namespace Roguelike
             Scribe_Values.Look(ref tile, "tile");
             Scribe_Values.Look(ref type, "type");
             Scribe_Values.Look(ref state, "state");
+            Scribe_Values.Look(ref reward, "reward");
             Scribe_Defs.Look(ref preset, "preset");
             Scribe_Collections.Look(ref next, "next", LookMode.Value);
             next ??= new List<int>();
@@ -58,8 +70,61 @@ namespace Roguelike
         public bool runWon;
         public bool runLost;
         public List<RunNode> nodes = new List<RunNode>();
+        public List<RelicDef> relics = new List<RelicDef>();
+        public List<BlueprintGroupDef> blueprints = new List<BlueprintGroupDef>();
+        /// <summary>Node whose reward screen hasn't been resolved yet (reopened after loading a save).</summary>
+        public int pendingRewardNodeId = -1;
 
         public bool RunOver => runWon || runLost;
+
+        // ---------- Relics and blueprints ----------
+
+        public float GraceDaysOffset => relics.Sum(r => r.graceDaysOffset);
+        public float WeatherRateFactor => relics.Aggregate(1f, (f, r) => f * r.weatherRateFactor);
+        public float MaxPaceFactorFactor => relics.Aggregate(1f, (f, r) => f * r.maxPaceFactorFactor);
+
+        public bool IsBuildingLocked(BuildableDef def) =>
+            def != null && BlueprintGroupDef.Gated.Contains(def) && !blueprints.Any(b => b.buildings.Contains(def));
+
+        public void AddRelic(RelicDef relic)
+        {
+            if (relic == null || relics.Contains(relic)) return;
+            relics.Add(relic);
+            ApplyRelicHediffs();
+        }
+
+        /// <summary>Gives every colonist (including newcomers) the status effects of hediff relics.</summary>
+        public void ApplyRelicHediffs()
+        {
+            var defs = relics.Where(r => r.hediff != null).Select(r => r.hediff).ToList();
+            if (defs.Count == 0) return;
+            foreach (var pawn in PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists)
+                foreach (var def in defs)
+                    RelicEffects.EnsureHediff(pawn, def);
+        }
+
+        /// <summary>Opens the reward screen for a just-cleared node.</summary>
+        public void OfferReward(RunNode node, Map map)
+        {
+            if (node == null || node.reward == RunRewardKind.None) return;
+            pendingRewardNodeId = node.id;
+            var cards = RewardUtility.Generate(this, node.reward);
+            Find.WindowStack.Add(new Dialog_RewardPick(cards, $"{node.preset.LabelCap} cleared", card =>
+            {
+                if (card != null) RewardUtility.Apply(card, map, map == null ? Find.WorldObjects.Caravans.FirstOrDefault(c => c.IsPlayerControlled) : null);
+                pendingRewardNodeId = -1;
+            }));
+        }
+
+        public override void FinalizeInit(bool fromLoad)
+        {
+            base.FinalizeInit(fromLoad);
+            if (fromLoad && active && pendingRewardNodeId >= 0)
+            {
+                var node = NodeById(pendingRewardNodeId);
+                LongEventHandler.ExecuteWhenFinished(() => OfferReward(node, Current.Game.FindMap(node.tile)));
+            }
+        }
 
         public WorldComponent_RoguelikeRun(World world) : base(world) { }
 
@@ -102,6 +167,7 @@ namespace Roguelike
                 Lose("Your whole squad is gone.");
                 return;
             }
+            ApplyRelicHediffs();
             // The current node's map disappears if everyone leaves (or abandons it) before the objective is met.
             var current = CurrentNode;
             if (current != null && Current.Game.FindMap(current.tile) == null)
@@ -132,6 +198,7 @@ namespace Roguelike
                 return;
             }
             foreach (int id in node.next) NodeById(id).state = RunNodeState.Available;
+            OfferReward(node, Current.Game.FindMap(tile));
         }
 
         // ---------- Generation ----------
@@ -282,6 +349,8 @@ namespace Roguelike
                 var pool = all.Where(p => p.isBoss == n.IsBoss).ToList();
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
                 n.preset = (fitting.Count > 0 ? fitting : pool.Count > 0 ? pool : all).RandomElement();
+                // About a quarter of the middle nodes offer recruits instead of a mixed card draw.
+                n.reward = n.IsBoss ? RunRewardKind.None : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
             }
         }
 
@@ -314,6 +383,11 @@ namespace Roguelike
             Scribe_Values.Look(ref active, "active");
             Scribe_Values.Look(ref runWon, "runWon");
             Scribe_Values.Look(ref runLost, "runLost");
+            Scribe_Values.Look(ref pendingRewardNodeId, "pendingRewardNodeId", -1);
+            Scribe_Collections.Look(ref relics, "relics", LookMode.Def);
+            Scribe_Collections.Look(ref blueprints, "blueprints", LookMode.Def);
+            relics ??= new List<RelicDef>();
+            blueprints ??= new List<BlueprintGroupDef>();
             Scribe_Collections.Look(ref nodes, "nodes", LookMode.Deep);
             nodes ??= new List<RunNode>();
         }
@@ -402,6 +476,7 @@ namespace Roguelike
             Line($"Row {n.row + 1}{(n.IsBoss ? " (boss)" : "")} · {StateText(n.state)}");
             if (n.next.Count > 0) Line($"Leads to {n.next.Count} node{(n.next.Count == 1 ? "" : "s")}.");
             // Inspect strings must not contain blank lines.
+            Line(n.RewardText);
             Line(n.preset.Briefing.Replace("\n\n", "\n"));
             return sb.ToString();
         }

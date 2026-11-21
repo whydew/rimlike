@@ -12,6 +12,7 @@ namespace Roguelike
         public static void StartOn(Map map, NodePresetDef preset, LookTargets look)
         {
             map.GetComponent<MapComponent_RoguelikeNode>().Start(preset);
+            RelicEffects.OnNodeStart(map);
             Find.LetterStack.ReceiveLetter("Node: " + preset.LabelCap, preset.Briefing, LetterDefOf.NeutralEvent, look);
         }
 

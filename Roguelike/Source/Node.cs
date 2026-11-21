@@ -82,7 +82,12 @@ namespace Roguelike
 
         public float Days => (Find.TickManager.TicksGame - startTick) / (float)GenDate.TicksPerDay;
 
-        public bool InGrace => Days < preset.graceDays;
+        private static WorldComponent_RoguelikeRun Run => WorldComponent_RoguelikeRun.Get is { active: true } r ? r : null;
+
+        /// <summary>Grace period including relic bonuses.</summary>
+        public float GraceDays => preset.graceDays + (Run?.GraceDaysOffset ?? 0f);
+
+        public bool InGrace => Days < GraceDays;
 
         public int Have(ThingDefCountClass q) => map.resourceCounter.GetCount(q.thingDef);
 
@@ -95,7 +100,8 @@ namespace Roguelike
 
         /// <summary>Above 1 when behind pace (worsens faster), below 1 when ahead.</summary>
         public float PaceFactor =>
-            Mathf.Clamp(1f + (ExpectedProgress - Progress) * preset.paceSensitivity, preset.minPaceFactor, preset.maxPaceFactor);
+            Mathf.Clamp(1f + (ExpectedProgress - Progress) * preset.paceSensitivity, preset.minPaceFactor,
+                Mathf.Max(1f, 1f + (preset.maxPaceFactor - 1f) * (Run?.MaxPaceFactorFactor ?? 1f)));
 
         public GameCondition_EscalatingTemperature Condition =>
             map.gameConditionManager.ActiveConditions.OfType<GameCondition_EscalatingTemperature>().FirstOrDefault();
@@ -126,7 +132,7 @@ namespace Roguelike
         {
             var cond = Condition;
             if (cond == null || InGrace) return;
-            cond.offset += preset.offsetPerDay * PaceFactor * days;
+            cond.offset += preset.offsetPerDay * (Run?.WeatherRateFactor ?? 1f) * PaceFactor * days;
         }
 
         public void Complete()
@@ -232,13 +238,13 @@ namespace Roguelike
                 sb.AppendLine($"{cond.def.LabelCap}: {cond.offset.ToStringTemperatureOffset("F1")} now.");
                 if (c.InGrace)
                 {
-                    sb.Append($"Holding off for {c.preset.graceDays - c.Days:0.0} more days.");
+                    sb.Append($"Holding off for {c.GraceDays - c.Days:0.0} more days.");
                 }
                 else
                 {
                     float factor = c.PaceFactor;
                     string pace = factor < 0.95f ? "ahead of pace, slowed" : factor > 1.05f ? "behind pace, sped up" : "on pace";
-                    sb.Append($"Changing {(c.preset.offsetPerDay * factor).ToStringTemperatureOffset("F1")} per day (x{factor:0.00}, {pace}).");
+                    sb.Append($"Changing {(c.preset.offsetPerDay * factor * (WorldComponent_RoguelikeRun.Get is { active: true } r ? r.WeatherRateFactor : 1f)).ToStringTemperatureOffset("F1")} per day (x{factor:0.00}, {pace}).");
                 }
             }
             return sb.ToString().TrimEnd();
