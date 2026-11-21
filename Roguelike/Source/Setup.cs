@@ -480,7 +480,7 @@ namespace Roguelike
         private static void DrawPawn(Rect inner, Pawn p, Color kind)
         {
             float a = GUI.color.a;
-            var portrait = new Rect(inner.center.x - 50f, inner.y, 100f, 100f);
+            var portrait = new Rect(inner.center.x - 44f, inner.y, 88f, 88f);
             Style.GlowAround(portrait, new Color(kind.r, kind.g, kind.b, 0.35f), 1.5f);
             GUI.DrawTexture(portrait, PortraitsCache.Get(p, portrait.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.4f));
             if (ModsConfig.BiotechActive && p.genes?.XenotypeIcon != null && p.genes.Xenotype != XenotypeDefOf.Baseliner)
@@ -514,24 +514,32 @@ namespace Roguelike
             }
             y += 22f;
 
-            // Best skills with passion flames.
+            // Every skill in the game's own order, so cards compare row by row; rows squeeze to fit the card.
             if (p.skills != null)
             {
-                foreach (var s in p.skills.skills.Where(s => !s.TotallyDisabled).OrderByDescending(s => s.Level).Take(Mathf.Max(0, Mathf.FloorToInt((inner.yMax - y - 16f) / 15f))))
+                var skills = p.skills.skills.OrderBy(s => s.def.listOrder).ToList();
+                float rowH = Mathf.Clamp((inner.yMax - y) / skills.Count, 10f, 15f);
+                foreach (var s in skills)
                 {
-                    var row = new Rect(inner.x, y, inner.width, 14f);
-                    Style.ShadowLabel(new Rect(row.x, row.y - 1f, 78f, 16f), s.def.skillLabel.CapitalizeFirst(), new Color(0.88f, 0.86f, 0.8f));
-                    var track = new Rect(row.x + 80f, row.y + 3f, row.width - 120f, 8f);
+                    if (y + rowH > inner.yMax + 1f) break;
+                    var row = new Rect(inner.x, y, inner.width, rowH);
+                    bool off = s.TotallyDisabled;
+                    Style.ShadowLabel(new Rect(row.x, row.y + rowH / 2f - 8f, 78f, 16f), s.def.skillLabel.CapitalizeFirst(), off ? new Color(0.6f, 0.45f, 0.42f) : new Color(0.88f, 0.86f, 0.8f));
+                    var track = new Rect(row.x + 80f, row.y + rowH / 2f - 3.5f, row.width - 120f, 7f);
                     Style.Box(track, new Color(0f, 0f, 0f, 0.45f));
-                    Style.Box(new Rect(track.x, track.y, track.width * s.Level / 20f, track.height), new Color(kind.r, kind.g, kind.b, 0.85f));
-                    Style.ShadowLabel(new Rect(track.xMax + 4f, row.y - 1f, 20f, 16f), s.Level.ToString(), Color.white);
-                    if (s.passion != Passion.None)
-                        Style.Tex(new Rect(row.xMax - 14f, row.y, 14f, 14f), s.passion == Passion.Major ? SkillUI.PassionMajorIcon : SkillUI.PassionMinorIcon, Color.white);
-                    y += 15f;
+                    if (off)
+                    {
+                        Style.ShadowLabel(new Rect(track.xMax + 4f, row.y + rowH / 2f - 8f, 20f, 16f), "—", new Color(1f, 0.45f, 0.4f));
+                    }
+                    else
+                    {
+                        Style.Box(new Rect(track.x, track.y, track.width * s.Level / 20f, track.height), new Color(kind.r, kind.g, kind.b, 0.85f));
+                        Style.ShadowLabel(new Rect(track.xMax + 4f, row.y + rowH / 2f - 8f, 20f, 16f), s.Level.ToString(), Color.white);
+                        if (s.passion != Passion.None)
+                            Style.Tex(new Rect(row.xMax - 13f, row.y + rowH / 2f - 6.5f, 13f, 13f), s.passion == Passion.Major ? SkillUI.PassionMajorIcon : SkillUI.PassionMinorIcon, Color.white);
+                    }
+                    y += rowH;
                 }
-                var disabled = p.skills.skills.Where(s => s.TotallyDisabled).Select(s => s.def.skillLabel).ToList();
-                if (disabled.Count > 0 && y + 14f <= inner.yMax)
-                    Style.ShadowLabel(new Rect(inner.x, y + 1f, inner.width, 16f), ("Can't: " + string.Join(", ", disabled)).Truncate(inner.width), new Color(1f, 0.5f, 0.45f));
             }
             Text.Font = GameFont.Small;
             GUI.color = new Color(1f, 1f, 1f, a);
