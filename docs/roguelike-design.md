@@ -190,3 +190,9 @@ Biggest risks: blueprint drafting (patching build and research menus), hand-anim
 
 The core-loop prototype lives in [`Roguelike/`](../Roguelike/README.md).
 
+
+## Playtest round 2 (2026-11-21)
+
+- The whole run (three acts) is laid out at world generation and spread across the planet; each act's boss leads to the next act's starting nodes. NPC settlements are removed; elite and boss nodes are hostile faction bases assaulted on their own maps.
+- After a node (and its reward) a card screen picks the next node, then the caravan packing screen (carry limit enforced, no route step) sends the squad straight in.
+- Expeditions are now classic base building sized to 25–45 in-game days, from [the pacing research](research/rimworld-early-game-pacing.md): requirement lists (produce, keep, build, bedrooms, dining room, shelter, no deaths) with squad scaling and a minimum stay. Weather modifiers are rolled per node to fit the climate, with slower rates on each modifier. The stonecutter's table is always buildable so Stone Fortress is reachable.

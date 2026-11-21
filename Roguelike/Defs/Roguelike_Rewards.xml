@@ -241,8 +241,8 @@
   <Roguelike.BlueprintGroupDef>
     <defName>Roguelike_BP_Crafting</defName>
     <label>Crafting</label>
-    <description>Tailoring benches, smithies, stonecutter's table and smelter.</description>
-    <buildings><li>HandTailoringBench</li><li>ElectricTailoringBench</li><li>FueledSmithy</li><li>ElectricSmithy</li><li>TableStonecutter</li><li>ElectricSmelter</li></buildings>
+    <description>Tailoring benches, smithies and smelter.</description>
+    <buildings><li>HandTailoringBench</li><li>ElectricTailoringBench</li><li>FueledSmithy</li><li>ElectricSmithy</li><li>ElectricSmelter</li></buildings>
   </Roguelike.BlueprintGroupDef>
 
   <Roguelike.BlueprintGroupDef>

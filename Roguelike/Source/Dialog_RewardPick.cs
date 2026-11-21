@@ -229,7 +229,7 @@ namespace Roguelike
                 case RewardKind.Recruit:
                     return RecruitSummary(card.recruit);
                 case RewardKind.Path:
-                    return card.pathNode.RewardText + "\n" + card.pathNode.preset.Briefing.Replace("\n\n", "\n");
+                    return card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }
             return "";
         }

@@ -10,6 +10,7 @@
     <label>deepening cold</label>
     <description>An unnatural cold has settled over this region. Once it starts, it gets worse every day until you leave.</description>
     <allowUnderground>false</allowUnderground>
+    <modExtensions><li Class="Roguelike.ModifierExtension"><ratePerDay>-1.4</ratePerDay><graceDays>4</graceDays><tileTemperature>-100~18</tileTemperature></li></modExtensions>
   </GameConditionDef>
 
   <GameConditionDef>
@@ -18,6 +19,7 @@
     <label>rising heat</label>
     <description>An unnatural heat has settled over this region. Once it starts, it gets worse every day until you leave.</description>
     <allowUnderground>false</allowUnderground>
+    <modExtensions><li Class="Roguelike.ModifierExtension"><ratePerDay>1.4</ratePerDay><graceDays>4</graceDays><tileTemperature>12~100</tileTemperature></li></modExtensions>
   </GameConditionDef>
 
   <GameConditionDef>
@@ -26,6 +28,7 @@
     <label>creeping toxins</label>
     <description>Toxic particles drift down and build up in anyone outdoors. Once it is strong enough it seeps indoors too.</description>
     <allowUnderground>false</allowUnderground>
+    <modExtensions><li Class="Roguelike.ModifierExtension"><ratePerDay>0.012</ratePerDay><graceDays>5</graceDays></li></modExtensions>
   </GameConditionDef>
 
   <GameConditionDef>
@@ -33,6 +36,7 @@
     <conditionClass>Roguelike.GameCondition_EscalatingPsychic</conditionClass>
     <label>rising psychic drone</label>
     <description>A psychic drone that grows stronger every day, souring everyone's mood until minds start to break.</description>
+    <modExtensions><li Class="Roguelike.ModifierExtension"><ratePerDay>0.13</ratePerDay><graceDays>4</graceDays></li></modExtensions>
   </GameConditionDef>
 
   <ThoughtDef>
@@ -118,84 +122,93 @@
     weight:          relative chance among presets of the same kind.
   -->
 
-  <!-- Expeditions -->
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_ColdTest</defName>
-    <label>cold expedition</label>
-    <description>Stockpile the quota before the cold makes the outdoors unlivable.</description>
-    <condition>Roguelike_EscalatingCold</condition>
-    <offsetPerDay>-4</offsetPerDay>
-    <tileTemperature>-100~18</tileTemperature>
-    <quota>
-      <WoodLog>400</WoodLog>
-      <Steel>150</Steel>
-    </quota>
+  <!-- Expeditions: classic base building. Each takes roughly 25-45 in-game days (see docs/research/rimworld-early-game-pacing.md):
+       a list of requirements (counts marked perColonist scale with the squad on arrival) plus a minimum stay,
+       under a weather modifier rolled per node to fit the climate (rates live on the modifiers' ModifierExtension). -->
+  <Roguelike.NodePresetDef Name="Roguelike_BaseExpedition" Abstract="True">
+    <objective>Requirements</objective>
+    <randomModifier>true</randomModifier>
+    <minDays>25</minDays>
+    <targetDays>30</targetDays>
+    <paceSensitivity>1.5</paceSensitivity>
+    <minPaceFactor>0.5</minPaceFactor>
+    <maxPaceFactor>1.6</maxPaceFactor>
   </Roguelike.NodePresetDef>
 
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_HeatTest</defName>
-    <label>heat expedition</label>
-    <description>Stockpile the quota before the heat makes the outdoors unlivable.</description>
-    <condition>Roguelike_EscalatingHeat</condition>
-    <offsetPerDay>4</offsetPerDay>
-    <tileTemperature>12~100</tileTemperature>
-    <quota>
-      <WoodLog>400</WoodLog>
-      <Steel>150</Steel>
-    </quota>
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_GreatGranary</defName>
+    <label>great granary</label>
+    <description>Fertile ground, a long season. Grow a granary's worth of corn and keep the squad fed and housed.</description>
+    <requirements>
+      <li><kind>Produce</kind><thing>RawCorn</thing><count>1500</count></li>
+      <li><kind>Keep</kind><thing>MealSimple</thing><count>20</count><perColonist>true</perColonist></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
   </Roguelike.NodePresetDef>
 
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_ToxicGrove</defName>
-    <label>poisoned grove</label>
-    <description>Gather timber and steel while toxins drift down on the camp.</description>
-    <condition>Roguelike_EscalatingToxic</condition>
-    <offsetPerDay>0.06</offsetPerDay>
-    <quota>
-      <WoodLog>300</WoodLog>
-      <Steel>100</Steel>
-    </quota>
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_HarvestRotation</defName>
+    <label>harvest rotation</label>
+    <description>Work the fields through a full rotation of rice, potatoes and corn.</description>
+    <requirements>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>600</count></li>
+      <li><kind>Produce</kind><thing>RawPotatoes</thing><count>600</count></li>
+      <li><kind>Produce</kind><thing>RawCorn</thing><count>600</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
   </Roguelike.NodePresetDef>
 
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_PsychicHoldout</defName>
-    <label>whispering hills</label>
-    <description>Hold out while a psychic drone builds over the hills.</description>
-    <objective>Survive</objective>
-    <surviveDays>5</surviveDays>
-    <condition>Roguelike_EscalatingPsychic</condition>
-    <offsetPerDay>0.6</offsetPerDay>
-    <targetDays>5</targetDays>
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_RiceCooperative</defName>
+    <label>rice cooperative</label>
+    <description>Paddies by the water. Bring in a great rice harvest and give everyone a room of their own.</description>
+    <requirements>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>1800</count></li>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
+    </requirements>
   </Roguelike.NodePresetDef>
 
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_FrostFort</defName>
-    <label>frost fort</label>
-    <description>Wall in a shelter before the cold closes in.</description>
-    <objective>Build</objective>
-    <condition>Roguelike_EscalatingCold</condition>
-    <offsetPerDay>-4</offsetPerDay>
-    <tileTemperature>-100~18</tileTemperature>
-    <buildTarget>
-      <Wall>100</Wall>
-      <Door>4</Door>
-      <Bed>3</Bed>
-    </buildTarget>
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_MedicinalGarden</defName>
+    <label>medicinal garden</label>
+    <description>Healroot grows wild here. Cultivate a medicine stock (needs a grower with Plants 8) and keep everyone housed.</description>
+    <requirements>
+      <li><kind>Produce</kind><thing>MedicineHerbal</thing><count>60</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
   </Roguelike.NodePresetDef>
 
-  <Roguelike.NodePresetDef>
-    <defName>Roguelike_SunFort</defName>
-    <label>sun-scorched fort</label>
-    <description>Wall in a shelter before the heat closes in.</description>
-    <objective>Build</objective>
-    <condition>Roguelike_EscalatingHeat</condition>
-    <offsetPerDay>4</offsetPerDay>
-    <tileTemperature>12~100</tileTemperature>
-    <buildTarget>
-      <Wall>100</Wall>
-      <Door>4</Door>
-      <Bed>3</Bed>
-    </buildTarget>
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_StoneFortress</defName>
+    <label>stone fortress</label>
+    <description>Rocky ground and long nights. Cut stone and raise a real fortress.</description>
+    <requirements>
+      <li><kind>Build</kind><thing>Wall</thing><count>200</count><stuffCategory>Stony</stuffCategory></li>
+      <li><kind>Build</kind><thing>Door</thing><count>8</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_PrivateQuarters</defName>
+    <label>private quarters</label>
+    <description>Settle in properly: a bedroom for everyone and a shared dining room.</description>
+    <requirements>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
+      <li><kind>DiningRoom</kind><minCells>25</minCells></li>
+    </requirements>
+  </Roguelike.NodePresetDef>
+
+  <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
+    <defName>Roguelike_SeasonalEndurance</defName>
+    <label>seasonal endurance</label>
+    <description>Hold this ground for a full season. Nobody can be lost.</description>
+    <minDays>30</minDays>
+    <requirements>
+      <li><kind>NoDeaths</kind></li>
+      <li><kind>Keep</kind><thing>MealSimple</thing><count>10</count><perColonist>true</perColonist></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
   </Roguelike.NodePresetDef>
 
   <!-- Combat -->

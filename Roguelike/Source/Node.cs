@@ -22,7 +22,7 @@ namespace Roguelike
     /// <summary>Expedition: build up a camp under a clock. Combat nodes: kill the enemy. Escort: keep someone alive. Event: a choice, no map.</summary>
     public enum NodeKind { Expedition, CombatAlerted, CombatUnaware, Escort, Event, Elite, Rest, Merchant, Treasure }
 
-    public enum ObjectiveKind { Stockpile, Survive, Build, KillAll, Escort }
+    public enum ObjectiveKind { Stockpile, Survive, Build, KillAll, Escort, Requirements }
 
     /// <summary>Tunable node setup, loaded from XML.</summary>
     public class NodePresetDef : Def
@@ -35,8 +35,10 @@ namespace Roguelike
         /// <summary>The node is a hostile faction base: you assault its defenders on the base's own map.</summary>
         public bool assault;
 
-        /// <summary>Weather modifier; null for none. Its rate is offsetPerDay (°C for temperature, buildup/day for toxic, levels/day for psychic).</summary>
+        /// <summary>Fixed weather modifier; null for none. Its rate is offsetPerDay (°C for temperature, buildup/day for toxic, levels/day for psychic).</summary>
         public GameConditionDef condition;
+        /// <summary>Roll the modifier per node from every modifier with a ModifierExtension that fits the tile (rate and grace come from it).</summary>
+        public bool randomModifier;
         public float graceDays = 2f;
         public float offsetPerDay = -4f;
         public float targetDays = 8f;
@@ -52,6 +54,9 @@ namespace Roguelike
         public List<ThingDefCountClass> quota = new List<ThingDefCountClass>();
         public List<ThingDefCountClass> buildTarget = new List<ThingDefCountClass>();
         public float surviveDays = 4f;
+        /// <summary>Base-building objective: every requirement must be met, after at least minDays on the node.</summary>
+        public List<NodeRequirement> requirements = new List<NodeRequirement>();
+        public float minDays;
 
         /// <summary>Raid strength relative to the storyteller's current threat points.</summary>
         public float threatScale = 1f;
@@ -66,43 +71,61 @@ namespace Roguelike
         /// <summary>For rest and treasure nodes: the fixed event to open (otherwise a random pooled event).</summary>
         public RoguelikeEventDef eventDef;
 
-        public string ObjectiveText => objective switch
-        {
-            ObjectiveKind.Stockpile => "Stockpile " + string.Join(", ", quota.Select(q => $"{q.count} {q.thingDef.label}")),
-            ObjectiveKind.Build => "Build " + string.Join(", ", buildTarget.Select(q => $"{q.count} {q.thingDef.label}")),
-            ObjectiveKind.Survive => $"Hold out for {surviveDays:0.#} days",
-            ObjectiveKind.KillAll => "Defeat every enemy on the map",
-            ObjectiveKind.Escort => $"Keep the refugee alive for {surviveDays:0.#} days",
-            _ => "",
-        };
+        public float RateFor(GameConditionDef modifier) =>
+            randomModifier ? modifier?.GetModExtension<ModifierExtension>()?.ratePerDay ?? 0f : offsetPerDay;
 
-        public string Briefing
+        public float GraceFor(GameConditionDef modifier) =>
+            randomModifier ? modifier?.GetModExtension<ModifierExtension>()?.graceDays ?? graceDays : graceDays;
+
+        public string ObjectiveTextFor(int squad)
         {
-            get
+            string text = objective switch
             {
-                if (!HasMap) return description + "\n\nResolves when your caravan arrives. No map, no clock.";
-                var sb = new StringBuilder(description);
-                sb.Append($"\n\nObjective: {ObjectiveText}.");
-                if (kind is NodeKind.CombatAlerted or NodeKind.Elite) sb.Append(" The enemy knows you're here and attacks at once.");
-                if (kind == NodeKind.CombatUnaware) sb.Append(" The enemy camp hasn't spotted you yet: scout and prepare, then strike.");
-                if (patrolIntervalDays > 0f) sb.Append($" Enemy patrols raid about every {patrolIntervalDays:0.#} days.");
-                if (reinforcementDays > 0f) sb.Append($" Enemy reinforcements arrive on day {reinforcementDays:0.#}.");
-                if (condition != null)
-                {
-                    var worker = condition.conditionClass;
-                    string rate = typeof(GameCondition_EscalatingTemperature).IsAssignableFrom(worker) ? offsetPerDay.ToStringTemperatureOffset("F0")
-                        : typeof(GameCondition_EscalatingToxic).IsAssignableFrom(worker) ? $"{offsetPerDay:0.00} toxic buildup"
-                        : typeof(GameCondition_EscalatingStrikes).IsAssignableFrom(worker) ? $"{offsetPerDay:0.0} more strikes"
-                        : typeof(GameCondition_RisingFlood).IsAssignableFrom(worker) ? $"{offsetPerDay:0} cells of water"
-                        : $"{offsetPerDay:0.#} drone levels";
-                    sb.Append($"\n\n{condition.LabelCap}: holds off for {graceDays:0.#} days, then worsens by about {rate} per day with no limit. " +
-                              "It worsens slower while you're ahead of pace and faster while you're behind.");
-                }
-                if (objective == ObjectiveKind.Escort) sb.Append("\n\nIf the refugee dies, the run ends.");
-                sb.Append("\n\nLeaving before the objective is met ends the run.");
-                return sb.ToString();
-            }
+                ObjectiveKind.Stockpile => "Stockpile " + string.Join(", ", quota.Select(q => $"{q.count} {q.thingDef.label}")),
+                ObjectiveKind.Build => "Build " + string.Join(", ", buildTarget.Select(q => $"{q.count} {q.thingDef.label}")),
+                ObjectiveKind.Survive => $"Hold out for {surviveDays:0.#} days",
+                ObjectiveKind.KillAll => "Defeat every enemy on the map",
+                ObjectiveKind.Escort => $"Keep the refugee alive for {surviveDays:0.#} days",
+                ObjectiveKind.Requirements => string.Join("; ", requirements.Select(r => r.Describe(squad))).CapitalizeFirst(),
+                _ => "",
+            };
+            if (minDays > 0f) text += $"; stay at least {minDays:0.#} days";
+            return text;
         }
+
+        public string ObjectiveText => ObjectiveTextFor(3);
+
+        /// <summary>The node briefing for a given weather modifier and squad size.</summary>
+        public string BriefingFor(GameConditionDef modifier, int squad)
+        {
+            if (!HasMap) return description + "\n\nResolves when your caravan arrives. No map, no clock.";
+            var sb = new StringBuilder(description);
+            sb.Append($"\n\nObjective: {ObjectiveTextFor(squad)}.");
+            if (objective == ObjectiveKind.Requirements && squad > 0) sb.Append($" (Counts are for a squad of {squad}.)");
+            if (kind is NodeKind.CombatAlerted or NodeKind.Elite) sb.Append(" The enemy knows you're here and attacks at once.");
+            if (kind == NodeKind.CombatUnaware) sb.Append(" The enemy camp hasn't spotted you yet: scout and prepare, then strike.");
+            if (patrolIntervalDays > 0f) sb.Append($" Enemy patrols raid about every {patrolIntervalDays:0.#} days.");
+            if (reinforcementDays > 0f) sb.Append($" Enemy reinforcements arrive on day {reinforcementDays:0.#}.");
+            if (modifier != null)
+            {
+                float rate = RateFor(modifier);
+                var worker = modifier.conditionClass;
+                string perDay = typeof(GameCondition_EscalatingTemperature).IsAssignableFrom(worker) ? rate.ToStringTemperatureOffset("F1")
+                    : typeof(GameCondition_EscalatingToxic).IsAssignableFrom(worker) ? $"{rate:0.000} toxic buildup"
+                    : typeof(GameCondition_EscalatingStrikes).IsAssignableFrom(worker) ? $"{rate:0.00} more strikes"
+                    : typeof(GameCondition_RisingFlood).IsAssignableFrom(worker) ? $"{rate:0.#} cells of water"
+                    : $"{rate:0.00} drone levels";
+                sb.Append($"\n\n{modifier.LabelCap}: holds off for {GraceFor(modifier):0.#} days, then worsens by about {perDay} per day with no limit. " +
+                          "It worsens slower while you're ahead of pace and faster while you're behind.");
+            }
+            else if (randomModifier) sb.Append("\n\nWeather: a modifier that fits the local climate.");
+            if (objective == ObjectiveKind.Escort) sb.Append("\n\nIf the refugee dies, the run ends.");
+            if (requirements.Any(r => r.kind == RequirementKind.NoDeaths)) sb.Append("\n\nIf anyone dies here, the run ends.");
+            sb.Append("\n\nLeaving before the objective is met ends the run.");
+            return sb.ToString();
+        }
+
+        public string Briefing => BriefingFor(randomModifier ? null : condition, 3);
     }
 
     // ===================== Weather modifiers =====================
@@ -197,6 +220,16 @@ namespace Roguelike
         private const int UpdateInterval = 250;
 
         public NodePresetDef preset;
+        /// <summary>The weather modifier this node rolled (null for none) and its daily rate and grace.</summary>
+        public GameConditionDef modifier;
+        public float ratePerDay;
+        public float graceDays;
+        /// <summary>Squad size on entry; requirement counts scale with it.</summary>
+        public int squad = 3;
+        /// <summary>Everyone who arrived (for the no-deaths requirement).</summary>
+        public List<Pawn> entrySquad = new List<Pawn>();
+        /// <summary>How much of each produced item was already here on arrival.</summary>
+        private Dictionary<ThingDef, int> baselines = new Dictionary<ThingDef, int>();
         public int startTick;
         public bool completed;
         public bool failed;
@@ -218,12 +251,16 @@ namespace Roguelike
         private int Row => Run?.NodeAt(map.Tile)?.row ?? 0;
 
         /// <summary>Grace period including relic bonuses.</summary>
-        public float GraceDays => Mathf.Max(0f, preset.graceDays + (Run?.GraceDaysOffset ?? 0f));
+        public float GraceDays => Mathf.Max(0f, graceDays + (Run?.GraceDaysOffset ?? 0f));
 
         public bool InGrace => Days < GraceDays;
 
         public GameCondition_RoguelikeModifier Condition =>
             map.gameConditionManager.ActiveConditions.OfType<GameCondition_RoguelikeModifier>().FirstOrDefault();
+
+        public int Baseline(ThingDef def) => baselines.TryGetValue(def, out int n) ? n : 0;
+
+        public string Briefing => preset.BriefingFor(modifier, squad);
 
         // ---------- Objective ----------
 
@@ -231,10 +268,14 @@ namespace Roguelike
             ? map.listerBuildings.AllBuildingsColonistOfDef(q.thingDef).Count()
             : map.resourceCounter.GetCount(q.thingDef);
 
+        public int Have(NodeRequirement r) => RequirementUtility.Have(this, r);
+
         public int EnemiesLeft => enemyFaction == null ? 0
             : map.mapPawns.SpawnedPawnsInFaction(enemyFaction).Count(p => !p.Dead && !p.Downed);
 
         public bool EscortAlive => escort is { Dead: false, Destroyed: false, Spawned: true } && escort.Map == map;
+
+        public bool StayMet => Days >= preset.minDays;
 
         /// <summary>0..1 toward the objective.</summary>
         public float Progress => preset.objective switch
@@ -243,31 +284,45 @@ namespace Roguelike
             ObjectiveKind.Build => Average(preset.buildTarget),
             ObjectiveKind.Survive or ObjectiveKind.Escort => Mathf.Clamp01(Days / preset.surviveDays),
             ObjectiveKind.KillAll => initialEnemies == 0 ? 0f : Mathf.Clamp01(1f - EnemiesLeft / (float)initialEnemies),
+            ObjectiveKind.Requirements => preset.requirements.Count == 0 ? 1f
+                : preset.requirements.Average(r => Mathf.Clamp01(Have(r) / (float)r.Target(squad))),
             _ => 0f,
         };
 
         private float Average(List<ThingDefCountClass> list) =>
             list.Count == 0 ? 1f : list.Average(q => Mathf.Clamp01(Have(q) / (float)q.count));
 
-        public bool ObjectiveMet => preset.objective switch
+        public bool RequirementsMet => preset.objective switch
         {
             ObjectiveKind.Stockpile => preset.quota.All(q => Have(q) >= q.count),
             ObjectiveKind.Build => preset.buildTarget.All(q => Have(q) >= q.count),
             ObjectiveKind.Survive => Days >= preset.surviveDays,
             ObjectiveKind.Escort => Days >= preset.surviveDays && EscortAlive,
             ObjectiveKind.KillAll => initialEnemies > 0 && EnemiesLeft == 0,
+            ObjectiveKind.Requirements => preset.requirements.All(r => Have(r) >= r.Target(squad)),
             _ => false,
         };
 
-        public string ProgressText => preset.objective switch
+        public bool ObjectiveMet => RequirementsMet && StayMet;
+
+        public string ProgressText
         {
-            ObjectiveKind.Stockpile => string.Join(", ", preset.quota.Select(q => $"{Have(q)}/{q.count} {q.thingDef.label}")),
-            ObjectiveKind.Build => string.Join(", ", preset.buildTarget.Select(q => $"{Have(q)}/{q.count} {q.thingDef.label}")),
-            ObjectiveKind.Survive => $"hold out {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
-            ObjectiveKind.Escort => $"escort {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
-            ObjectiveKind.KillAll => $"{EnemiesLeft}/{initialEnemies} enemies left",
-            _ => "",
-        };
+            get
+            {
+                string text = preset.objective switch
+                {
+                    ObjectiveKind.Stockpile => string.Join(", ", preset.quota.Select(q => $"{Have(q)}/{q.count} {q.thingDef.label}")),
+                    ObjectiveKind.Build => string.Join(", ", preset.buildTarget.Select(q => $"{Have(q)}/{q.count} {q.thingDef.label}")),
+                    ObjectiveKind.Survive => $"hold out {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
+                    ObjectiveKind.Escort => $"escort {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
+                    ObjectiveKind.KillAll => $"{EnemiesLeft}/{initialEnemies} enemies left",
+                    ObjectiveKind.Requirements => string.Join(", ", preset.requirements.Select(r => r.Short(squad, Have(r)))),
+                    _ => "",
+                };
+                if (preset.minDays > 0f) text += $", day {Mathf.Min(Days, preset.minDays):0}/{preset.minDays:0}";
+                return text;
+            }
+        }
 
         // ---------- Pace and threat ----------
 
@@ -278,16 +333,27 @@ namespace Roguelike
             Mathf.Clamp(1f + (ExpectedProgress - Progress) * preset.paceSensitivity, preset.minPaceFactor,
                 Mathf.Max(1f, 1f + (preset.maxPaceFactor - 1f) * (Run?.MaxPaceFactorFactor ?? 1f)));
 
-        public float CurrentRatePerDay => preset.offsetPerDay * (Run?.WeatherRateFactor ?? 1f) * PaceFactor;
+        public float CurrentRatePerDay => ratePerDay * (Run?.WeatherRateFactor ?? 1f) * PaceFactor;
 
         // ---------- Lifecycle ----------
 
-        public void Start(NodePresetDef p)
+        /// <summary>Starts the node. <paramref name="rolledModifier"/> is the run node's modifier; debug nodes roll one for this tile.</summary>
+        public void Start(NodePresetDef p, GameConditionDef rolledModifier = null)
         {
             preset = p;
             startTick = Find.TickManager.TicksGame;
             completed = failed = false;
-            if (p.condition != null) map.gameConditionManager.RegisterCondition(GameConditionMaker.MakeConditionPermanent(p.condition));
+            modifier = p.randomModifier ? rolledModifier ?? ModifierPool.PickFor(map.Tile) : p.condition;
+            ratePerDay = p.RateFor(modifier);
+            graceDays = p.GraceFor(modifier);
+            if (modifier != null) map.gameConditionManager.RegisterCondition(GameConditionMaker.MakeConditionPermanent(modifier));
+
+            entrySquad = map.mapPawns.FreeColonists.ToList();
+            squad = Mathf.Clamp(entrySquad.Count, 1, 5);
+            baselines.Clear();
+            foreach (var r in p.requirements.Where(r => r.kind == RequirementKind.Produce && r.thing != null))
+                baselines[r.thing] = RequirementUtility.CountOnMap(map, r.thing);
+
             if (p.assault && map.Parent is Settlement { Faction: not null } enemyBase && !enemyBase.Faction.IsPlayer)
                 enemyFaction = enemyBase.Faction; // the base's defenders are the enemy
             else switch (p.kind)
@@ -318,6 +384,11 @@ namespace Roguelike
             if (preset.objective == ObjectiveKind.Escort && !EscortAlive)
             {
                 Fail("The refugee you were escorting is gone.");
+                return;
+            }
+            if (preset.requirements.Any(r => r.kind == RequirementKind.NoDeaths) && entrySquad.Any(p => p == null || p.Dead))
+            {
+                Fail("A squad member died, and this node allowed no deaths.");
                 return;
             }
             initialEnemies = Mathf.Max(initialEnemies, EnemiesLeft);
@@ -510,6 +581,14 @@ namespace Roguelike
             Scribe_Values.Look(ref nextPatrolTick, "nextPatrolTick", -1);
             Scribe_Values.Look(ref reinforcementTick, "reinforcementTick", -1);
             Scribe_Values.Look(ref raidsLaunched, "raidsLaunched");
+            Scribe_Defs.Look(ref modifier, "modifier");
+            Scribe_Values.Look(ref ratePerDay, "ratePerDay");
+            Scribe_Values.Look(ref graceDays, "graceDays");
+            Scribe_Values.Look(ref squad, "squad", 3);
+            Scribe_Collections.Look(ref entrySquad, "entrySquad", LookMode.Reference);
+            Scribe_Collections.Look(ref baselines, "baselines", LookMode.Def, LookMode.Value);
+            entrySquad ??= new List<Pawn>();
+            baselines ??= new Dictionary<ThingDef, int>();
         }
     }
 

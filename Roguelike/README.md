@@ -15,17 +15,17 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
 
 1. Enable **Harmony**, then **Roguelike (prototype)** below it.
 2. New game → scenario **Roguelike: Crashlanded** (other starters appear once unlocked: Tribal Hunters, Ice Nomads, and with the DLCs one starter per Biotech xenotype, Mech-tender, Psycaster Exile, Imperial Noble and Void Cultists). With the mod enabled only roguelike starts are listed; disable the mod to play standard RimWorld. → storyteller → world.
-3. On the landing screen the act is on the world map: 15 nodes in rows joined by lines, each with an icon for its kind, ending in a crowned **Boss**. A run has three acts. Select a bottom-row node (its briefing shows in the inspect pane) and press Next.
+3. On the landing screen the whole run is on the world map: three acts of 15 nodes, spread across the planet and joined by lines, each node with an icon for its kind. NPC settlements are cleared away; the only bases left are the elite and boss nodes. Select a bottom-row node of act 1 and press Next. Select a bottom-row node (its briefing shows in the inspect pane) and press Next.
 4. Each node has an objective; the panel at the top right shows progress and the weather. Node kinds:
-   - **Expedition:** stockpile a quota, build a target, or hold out for some days.
+   - **Expedition:** classic base building over roughly 25–45 in-game days: grow a granary of corn, a rice or crop rotation, a medicine garden, a stone fortress, private quarters, or a whole season with no deaths. Each has requirements that scale with your squad and a minimum stay, under a weather modifier rolled to fit the climate.
    - **Ambush:** a raid attacks at once; defeat every enemy.
    - **Raider camp:** a hidden camp across the map. Patrol raids, timed reinforcements and the weather push you to attack.
    - **Escort:** keep a refugee alive for a few days. If they die, the run ends.
-   - **Elite:** a tougher raid; the reward is a choice of relics.
+   - **Elite:** storm a hostile faction base; the reward is a choice of relics. Bosses are bigger bases with reinforcements.
    - **Event, rest site, treasure, merchant:** resolved on the world map, no map. Rest sites heal, train or treat; treasure gives relics; merchants sell cards for the silver your caravan carries.
 5. The modifier (cold, heat, toxic buildup, a psychic drone, meteors, tornadoes, a hurricane or a tidal surge on the coast) holds off for a grace period, then worsens every day with no cap: slower while you're ahead of pace, faster while behind.
 6. Clearing a node opens the reward screen: pick 1 card (relic, gear, implant, blueprint or recruit) or skip. Relics come in common, uncommon and rare. Recruit nodes offer only recruits. Un-drafted blueprint groups are hidden from the build menu.
-7. Then a letter: **Leave node now** opens the instant caravan screen. On the world map, select the caravan and right-click a node at the end of a gold line → **Go to**: the caravan goes straight in, no travel. Choosing a node skips its siblings.
+7. Then pick your next node from the cards (one per connected node), and pack what the squad and pack animals can carry (the carry limit is enforced). The squad goes straight into the chosen node, no travel. Choosing a node skips its siblings. Closed the cards by accident? Use **Leave node now** on the completion letter.
 8. Beating an act boss gives a card and lays out the next, harder act nearby. The run is won on the act-3 boss and lost on a squad wipe, a failed escort, or leaving a node early. The end-of-run screen shows stats and points, with **New run** to start again on the same world.
 
 **Meta points:** +1 per node cleared, +5 per boss, +1 per skipped reward. Spend them from the end-of-run screen or in **Options → Mod settings → Roguelike** on starters, extra relics/blueprints/gear in the pools, and permanent bonuses. Progress is stored in the mod settings file, not in saves. Winning unlocks the next **Ascension** level (up to 5), chosen in the same list; each level stacks a handicap.
@@ -65,7 +65,7 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 
 ## Known gaps
 
-- The reform-caravan screen doesn't block going over mass capacity; an overweight caravan just can't move.
-- Quotas aren't checked against what the map can supply.
+- Objectives aren't checked against what the map, season or squad skills can supply (e.g. healroot needs Plants 8).
+- Blueprint- and research-gated objectives from the pacing research (21–40) aren't implemented yet.
 - Card art is vanilla item icons; node icons are simple generated glyphs.
 - Several DLC signature relics are simplified versions of the design (see the design doc).

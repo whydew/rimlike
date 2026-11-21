@@ -282,10 +282,10 @@ namespace Roguelike
 
             // Grace then pace-driven change.
             var comp = NodeComp(map);
-            comp.startTick -= (int)((comp.preset.graceDays + 0.5f) * GenDate.TicksPerDay);
+            comp.startTick -= (int)((comp.GraceDays + 0.5f) * GenDate.TicksPerDay);
             comp.AdvanceThreat(1f);
             float off = comp.Condition.intensity;
-            SelfTest.Check(off != 0f && Math.Sign(off) == Math.Sign(comp.preset.offsetPerDay), $"after grace the weather moves the right way ({comp.Condition.IntensityText(off)}, pace x{comp.PaceFactor:0.00})");
+            SelfTest.Check(off != 0f && Math.Sign(off) == Math.Sign(comp.ratePerDay), $"after grace the weather moves the right way ({comp.Condition.IntensityText(off)}, pace x{comp.PaceFactor:0.00})");
 
             foreach (var w in Screenshot("s1_act_start", world: true)) yield return w;
 
@@ -389,11 +389,69 @@ namespace Roguelike
 
         private static NodePresetDef Preset(string name) => DefDatabase<NodePresetDef>.GetNamed(name);
 
+        /// <summary>Drops a stack of items next to the squad.</summary>
+        private static void Give(Map map, string def, int count)
+        {
+            var thingDef = DefDatabase<ThingDef>.GetNamed(def);
+            var near = map.mapPawns.FreeColonistsSpawned.First().Position;
+            while (count > 0)
+            {
+                var t = ThingMaker.MakeThing(thingDef);
+                t.stackCount = Math.Min(count, thingDef.stackLimit);
+                count -= t.stackCount;
+                GenPlace.TryPlaceThing(t, near, map, ThingPlaceMode.Near);
+            }
+        }
+
+        /// <summary>
+        /// Builds a roofed room with walls (granite blocks unless <paramref name="stuff"/> is given), one door and
+        /// <paramref name="beds"/> beds, or a table and chairs for a dining room. Returns the walls placed.
+        /// </summary>
+        private static int BuildRoom(Map map, int innerW, int innerH, int beds, ThingDef stuff, bool dining = false)
+        {
+            stuff ??= DefDatabase<ThingDef>.GetNamed("BlocksGranite");
+            int w = innerW + 2, h = innerH + 2;
+            if (!CellFinder.TryFindRandomCell(map, c =>
+                {
+                    var r = new CellRect(c.x, c.z, w, h);
+                    return r.InBounds(map) && r.Cells.All(x => x.Standable(map) && x.GetFirstPawn(map) == null && x.GetEdifice(map) == null && !x.Roofed(map));
+                }, out var corner))
+                return 0;
+            var rect = new CellRect(corner.x, corner.z, w, h);
+            var door = new IntVec3(rect.minX + w / 2, 0, rect.minZ);
+            int walls = 0;
+            foreach (var c in rect.EdgeCells)
+            {
+                var b = ThingMaker.MakeThing(c == door ? ThingDefOf.Door : ThingDefOf.Wall, c == door ? ThingDefOf.WoodLog : stuff);
+                b.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(b, c, map, WipeMode.Vanish);
+                if (c != door) walls++;
+            }
+            var inner = rect.ContractedBy(1);
+            foreach (var c in inner.Cells) map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
+            for (int i = 0; i < beds; i++)
+            {
+                var bed = ThingMaker.MakeThing(ThingDefOf.Bed, ThingDefOf.WoodLog);
+                bed.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(bed, new IntVec3(inner.minX + i * 1, 0, inner.minZ), map, Rot4.North, WipeMode.Vanish);
+            }
+            if (dining)
+            {
+                var table = ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("Table2x2c"), ThingDefOf.WoodLog);
+                table.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(table, inner.CenterCell, map, Rot4.North, WipeMode.Vanish);
+                var chair = ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("DiningChair"), ThingDefOf.WoodLog);
+                chair.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(chair, inner.CenterCell + new IntVec3(0, 0, -1), map, Rot4.North, WipeMode.Vanish);
+            }
+            return walls;
+        }
+
         /// <summary>Enters a debug node with <paramref name="preset"/> from the current map and waits for it.</summary>
-        private static IEnumerable<Func<bool>> EnterDebugNode(string preset)
+        private static IEnumerable<Func<bool>> EnterDebugNode(string preset, GameConditionDef modifier = null)
         {
             var from = Find.CurrentMap;
-            NodeLauncher.Enter(from, Preset(preset));
+            NodeLauncher.Enter(from, Preset(preset), modifier);
             yield return () => Find.CurrentMap != from && NodeComp(Find.CurrentMap) is { Active: true };
             yield return Frames(20);
         }
@@ -458,8 +516,60 @@ namespace Roguelike
             SelfTest.Check(comp.failed && !comp.completed, "escort: the refugee dying fails the node");
             SelfTest.Check(!run.RunOver, "escort: a failed debug node off the run graph does not end the run");
 
-            // Survive under a psychic drone.
-            foreach (var w in EnterDebugNode("Roguelike_PsychicHoldout")) yield return w;
+            // Base-building requirements, minimum stay and the per-node modifier.
+            var cold = DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingCold");
+            foreach (var w in EnterDebugNode("Roguelike_GreatGranary", cold)) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            SelfTest.Check(comp.modifier == cold && comp.Condition != null && Math.Abs(comp.ratePerDay + 1.4f) < 0.01f, $"granary: rolled modifier {comp.modifier?.defName} at {comp.ratePerDay} per day");
+            int squadSize = comp.squad;
+            SelfTest.Check(squadSize == map.mapPawns.FreeColonistsSpawnedCount, $"granary: requirement counts scale with the squad ({squadSize})");
+            Give(map, "RawCorn", 1500);
+            Give(map, "MealSimple", 20 * squadSize);
+            BuildRoom(map, 6, 4, squadSize, null);
+            yield return Ticks(300);
+            var corn = comp.preset.requirements.First(r => r.kind == RequirementKind.Produce);
+            SelfTest.Check(comp.Have(corn) == 1500, $"granary: produced corn counts from arrival ({comp.Have(corn)})");
+            SelfTest.Check(comp.RequirementsMet && !comp.completed, $"granary: requirements met but the minimum stay holds it open ({comp.ProgressText})");
+            comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "granary: completes once the minimum stay has passed");
+
+            // Stone fortress: only stone walls count.
+            foreach (var w in EnterDebugNode("Roguelike_StoneFortress", cold)) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            var walls = comp.preset.requirements.First(r => r.kind == RequirementKind.Build && r.thing == ThingDefOf.Wall);
+            int woodWalls = BuildRoom(map, 3, 3, 0, ThingDefOf.WoodLog);
+            yield return Ticks(60);
+            SelfTest.Check(woodWalls > 0 && comp.Have(walls) == 0, $"stone fortress: {woodWalls} wooden walls don't count as stone");
+            int stone = 0, doorsBuilt = 0;
+            while (stone < 200) stone += BuildRoom(map, 5, 5, comp.squad, null);
+            doorsBuilt = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Door).Count();
+            while (doorsBuilt < 8) { BuildRoom(map, 2, 2, 0, null); doorsBuilt++; }
+            yield return Ticks(300);
+            SelfTest.Check(comp.Have(walls) >= 200 && comp.RequirementsMet, $"stone fortress: requirements met ({comp.ProgressText})");
+            comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
+            yield return Ticks(300);
+            SelfTest.Check(comp.completed, "stone fortress: completes after the minimum stay");
+
+            // Private quarters: bedrooms and a dining room.
+            foreach (var w in EnterDebugNode("Roguelike_PrivateQuarters", cold)) yield return w;
+            map = Find.CurrentMap;
+            comp = NodeComp(map);
+            for (int i = 0; i < comp.squad; i++) BuildRoom(map, 4, 4, 1, null);
+            BuildRoom(map, 7, 6, 0, null, dining: true);
+            yield return Ticks(300);
+            var bedrooms = comp.preset.requirements.First(r => r.kind == RequirementKind.Bedrooms);
+            var dining = comp.preset.requirements.First(r => r.kind == RequirementKind.DiningRoom);
+            SelfTest.Check(comp.Have(bedrooms) >= comp.squad, $"private quarters: {comp.Have(bedrooms)} bedrooms recognized");
+            SelfTest.Check(comp.Have(dining) == 1, "private quarters: the dining room is recognized");
+            Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
+            foreach (var w in Screenshot("s7_rooms", world: false)) yield return w;
+
+            // Seasonal endurance under a psychic drone: a death fails it.
+            var psychic = DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingPsychic");
+            foreach (var w in EnterDebugNode("Roguelike_SeasonalEndurance", psychic)) yield return w;
             map = Find.CurrentMap;
             comp = NodeComp(map);
             var colonist = map.mapPawns.FreeColonistsSpawned.First();
@@ -467,34 +577,10 @@ namespace Roguelike
             var drone = DefDatabase<ThoughtDef>.GetNamed("Roguelike_PsychicDrone");
             var state = drone.Worker.CurrentState(colonist);
             SelfTest.Check(state.Active && state.StageIndex == 1, $"psychic modifier: medium drone mood penalty at level 2.5 (stage {state.StageIndex})");
-            comp.startTick -= (int)(comp.preset.surviveDays * GenDate.TicksPerDay);
+            comp.Condition.intensity = 0f;
+            map.mapPawns.FreeColonistsSpawned.Last().Kill(null);
             yield return Ticks(300);
-            SelfTest.Check(comp.completed, "hold-out: surviving the days completes the node");
-
-            // Build target.
-            foreach (var w in EnterDebugNode("Roguelike_FrostFort")) yield return w;
-            map = Find.CurrentMap;
-            comp = NodeComp(map);
-            var origin = map.mapPawns.FreeColonistsSpawned.First().Position;
-            int placed = 0;
-            var cells = GenRadial.RadialCellsAround(origin, 30f, false).ToList();
-            foreach (var q in comp.preset.buildTarget)
-            {
-                int done = 0;
-                foreach (var cell in cells)
-                {
-                    if (done >= q.count) break;
-                    var rect = GenAdj.OccupiedRect(cell, Rot4.North, q.thingDef.size);
-                    if (!rect.All(c => c.InBounds(map) && c.Standable(map) && c.GetFirstPawn(map) == null && c.GetEdifice(map) == null)) continue;
-                    var b = ThingMaker.MakeThing(q.thingDef, ThingDefOf.WoodLog);
-                    b.SetFaction(Faction.OfPlayer);
-                    GenSpawn.Spawn(b, cell, map, Rot4.North);
-                    done++;
-                    placed++;
-                }
-            }
-            yield return Ticks(300);
-            SelfTest.Check(comp.completed, $"build target: {placed} buildings complete the node ({comp.ProgressText})");
+            SelfTest.Check(comp.failed && !comp.completed, "seasonal endurance: a death fails the node");
 
             // Events: every option outcome against a caravan.
             var caravan = LeaveMap(map);
@@ -827,7 +913,7 @@ namespace Roguelike
             yield return Frames(60);
             var newRun = WorldComponent_RoguelikeRun.Get;
             SelfTest.Check(Find.World.info.seedString == seed, $"new run: same world seed ({seed})");
-            SelfTest.Check(newRun is { active: true, RunOver: false } && newRun.nodes.Count == 15 && newRun.Row(0).All(n => n.state == RunNodeState.Available),
+            SelfTest.Check(newRun is { active: true, RunOver: false } && newRun.nodes.Count == 15 * WorldComponent_RoguelikeRun.ActsPerRun && newRun.Row(0).All(n => n.state == RunNodeState.Available),
                 "new run: a fresh act is laid out and the starting nodes are open");
             foreach (var w in Screenshot("s5_newrun_landing", world: false)) yield return w;
 
@@ -866,7 +952,7 @@ namespace Roguelike
             run.CurrentNode.state = RunNodeState.Completed;
 
             // Meteors.
-            foreach (var w in EnterDebugNode("Roguelike_MeteorField")) yield return w;
+            foreach (var w in EnterDebugNode("Roguelike_GreatGranary", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingMeteors"))) yield return w;
             var map = Find.CurrentMap;
             var comp = NodeComp(map);
             var meteors = comp.Condition as GameCondition_EscalatingMeteors;
@@ -896,7 +982,7 @@ namespace Roguelike
             foreach (var f in map.listerThings.ThingsOfDef(ThingDefOf.Fire).ToList()) f.Destroy();
 
             // Tornadoes.
-            foreach (var w in EnterDebugNode("Roguelike_TornadoAlley")) yield return w;
+            foreach (var w in EnterDebugNode("Roguelike_GreatGranary", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingTornadoes"))) yield return w;
             map = Find.CurrentMap;
             var tornadoes = NodeComp(map).Condition as GameCondition_EscalatingTornadoes;
             tornadoes.Strike(map);
@@ -904,7 +990,7 @@ namespace Roguelike
             foreach (var t in map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("Tornado")).ToList()) t.Destroy();
 
             // Hurricane.
-            foreach (var w in EnterDebugNode("Roguelike_HurricaneCoast")) yield return w;
+            foreach (var w in EnterDebugNode("Roguelike_GreatGranary", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingStorm"))) yield return w;
             map = Find.CurrentMap;
             var storm = NodeComp(map).Condition as GameCondition_EscalatingStorm;
             SelfTest.Check(storm?.ForcedWeather()?.defName == "RainyThunderstorm", "hurricane: forces a thunderstorm");
@@ -913,7 +999,7 @@ namespace Roguelike
             SelfTest.Check(map.weatherManager.eventHandler.LiveEventsListForReading.Count > events, "hurricane: lightning strikes");
 
             // Flood.
-            foreach (var w in EnterDebugNode("Roguelike_TidalSurge")) yield return w;
+            foreach (var w in EnterDebugNode("Roguelike_GreatGranary", DefDatabase<GameConditionDef>.GetNamed("Roguelike_RisingFlood"))) yield return w;
             map = Find.CurrentMap;
             var flood = NodeComp(map).Condition as GameCondition_RisingFlood;
             int Water(TerrainDef d) => map.AllCells.Count(c => c.GetTerrain(map) == d);

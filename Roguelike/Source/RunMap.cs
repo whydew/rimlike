@@ -29,6 +29,10 @@ namespace Roguelike
         public RunNodeState state;
         public RunRewardKind reward;
         public NodePresetDef preset;
+        /// <summary>Weather modifier rolled for this node (presets with randomModifier).</summary>
+        public GameConditionDef modifier;
+
+        public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, 3);
         public List<int> next = new List<int>();
 
         public bool IsBoss => type == RunNodeType.Boss;
@@ -52,6 +56,7 @@ namespace Roguelike
             Scribe_Values.Look(ref state, "state");
             Scribe_Values.Look(ref reward, "reward");
             Scribe_Defs.Look(ref preset, "preset");
+            Scribe_Defs.Look(ref modifier, "modifier");
             Scribe_Collections.Look(ref next, "next", LookMode.Value);
             next ??= new List<int>();
         }
@@ -536,6 +541,7 @@ namespace Roguelike
                 var fitting = pool.Where(p => p.tileTemperature.Includes(temp)).ToList();
                 var options = fitting.Count > 0 ? fitting : pool;
                 n.preset = options.RandomElementByWeight(p => p.weight);
+                if (n.preset.randomModifier) n.modifier = ModifierPool.PickFor(n.tile);
                 // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
                 n.reward = n.IsBoss ? (n.act < ActsPerRun ? RunRewardKind.Cards : RunRewardKind.None)
                     : !n.preset.HasMap ? RunRewardKind.None
@@ -693,7 +699,7 @@ namespace Roguelike
             if (n.next.Count > 0) Line($"Leads to {n.next.Count} node{(n.next.Count == 1 ? "" : "s")}.");
             // Inspect strings must not contain blank lines.
             Line(n.RewardText);
-            Line(n.preset.Briefing.Replace("\n\n", "\n"));
+            Line(n.Briefing.Replace("\n\n", "\n"));
             return sb.ToString();
         }
 
@@ -796,7 +802,7 @@ namespace Roguelike
             run.Choose(node);
             Current.Game.CurrentMap = map;
             CameraJumper.TryJump(new GlobalTargetInfo(map.Center, map));
-            NodeLauncher.StartOn(map, node.preset, new LookTargets(pawns));
+            NodeLauncher.StartOn(map, node.preset, new LookTargets(pawns), node.modifier);
         }
 
         public override void ExposeData()

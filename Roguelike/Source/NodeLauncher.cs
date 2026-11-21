@@ -9,15 +9,16 @@ namespace Roguelike
     public static class NodeLauncher
     {
         /// <summary>Starts a node on <paramref name="map"/> and briefs the player.</summary>
-        public static void StartOn(Map map, NodePresetDef preset, LookTargets look)
+        public static void StartOn(Map map, NodePresetDef preset, LookTargets look, GameConditionDef modifier = null)
         {
-            map.GetComponent<MapComponent_RoguelikeNode>().Start(preset);
+            var comp = map.GetComponent<MapComponent_RoguelikeNode>();
+            comp.Start(preset, modifier);
             RelicEffects.OnNodeStart(map);
-            Find.LetterStack.ReceiveLetter("Node: " + preset.LabelCap, preset.Briefing, LetterDefOf.NeutralEvent, look);
+            Find.LetterStack.ReceiveLetter("Node: " + preset.LabelCap, comp.Briefing, LetterDefOf.NeutralEvent, look);
         }
 
         /// <summary>Debug path: moves every colonist and colony animal on <paramref name="source"/> into a fresh node map.</summary>
-        public static void Enter(Map source, NodePresetDef preset)
+        public static void Enter(Map source, NodePresetDef preset, GameConditionDef modifier = null)
         {
             var pawns = source.mapPawns.FreeColonistsSpawned.Concat(source.mapPawns.SpawnedColonyAnimals).ToList();
             if (pawns.Count == 0)
@@ -38,7 +39,7 @@ namespace Roguelike
 
             Current.Game.CurrentMap = map;
             CameraJumper.TryJump(pawns[0]);
-            StartOn(map, preset, pawns[0]);
+            StartOn(map, preset, pawns[0], modifier);
         }
     }
 

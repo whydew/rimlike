@@ -91,7 +91,7 @@ namespace Roguelike
                 }
             }
             RelicEffects.OnRunStart(map);
-            NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map));
+            NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map), node.modifier);
         }
     }
 
