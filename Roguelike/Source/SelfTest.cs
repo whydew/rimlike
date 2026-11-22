@@ -42,6 +42,8 @@ namespace Roguelike
         {
             if (!SelfTest.Enabled) return true;
             MetaProgress.ResetForSelfTest();
+            // Hub-mode tests pick hub mode before the world (and so the run) is generated.
+            if (SelfTest.Mode.StartsWith("hub")) MetaProgress.S.hubMode = true;
             Current.ProgramState = ProgramState.Entry;
             Game.ClearCaches();
             Current.Game = new Game();
@@ -120,7 +122,7 @@ namespace Roguelike
     }
 
     /// <summary>The self-test scripts. Each yield is a wait condition.</summary>
-    public static class SelfTestScripts
+    public static partial class SelfTestScripts
     {
         public static IEnumerable<Func<bool>> For(string mode) => mode switch
         {
@@ -135,6 +137,7 @@ namespace Roguelike
             "disasters" => Disasters(),
             "polish" => Polish(),
             "gating" => Gating(),
+            "hub" => HubRun(),
             _ => Unknown(mode),
         };
 

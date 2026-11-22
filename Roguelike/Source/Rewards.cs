@@ -100,7 +100,7 @@ namespace Roguelike
             RewardKind.Gear or RewardKind.Implant => gear.LabelCap,
             RewardKind.Blueprint => blueprint.LabelCap,
             RewardKind.Recruit => recruit.Name.ToStringFull,
-            RewardKind.Path => (pathNode.IsBoss ? "Boss: " : "") + pathNode.preset.LabelCap,
+            RewardKind.Path => pathNode.preset.kind == NodeKind.Hub ? $"Hub: {Find.WorldGrid[pathNode.tile].PrimaryBiome.LabelCap}" : (pathNode.IsBoss ? "Boss: " : "") + pathNode.preset.LabelCap,
             RewardKind.Research => research.LabelCap,
             RewardKind.LevelUp => levelPawn.LabelShortCap,
             _ => "?",
@@ -113,7 +113,9 @@ namespace Roguelike
             RewardKind.Implant => "Implant",
             RewardKind.Blueprint => "Blueprint",
             RewardKind.Recruit => "Recruit",
-            RewardKind.Path => pathNode.IsBoss ? $"Act {pathNode.act} boss" : GenText.SplitCamelCase(pathNode.preset.kind.ToString()),
+            RewardKind.Path => WorldComponent_RoguelikeRun.Get?.hubMode == true
+                ? pathNode.depth == 0 ? "Hub site" : pathNode.IsBoss ? (pathNode.depth >= Hub.FinalDepth ? "Final boss" : $"Depth {pathNode.depth} boss") : $"{GenText.SplitCamelCase(pathNode.preset.kind.ToString())} · depth {pathNode.depth}"
+                : pathNode.IsBoss ? $"Act {pathNode.act} boss" : GenText.SplitCamelCase(pathNode.preset.kind.ToString()),
             RewardKind.Research => "Research",
             RewardKind.LevelUp => "Level up",
             _ => "",

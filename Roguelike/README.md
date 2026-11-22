@@ -2,7 +2,7 @@
 
 ![Rimlike banner](About/Preview.png)
 
-A run-based squad roguelike for RimWorld 1.7, built from [the design doc](../docs/roguelike-design.md). Pick a starter, land on a node of a branching act shown on a flat act map, clear nodes under worsening weather, draft rewards, and beat the boss. Meta points earned across runs buy unlocks.
+A run-based squad roguelike for RimWorld 1.7, built from [the design doc](../docs/roguelike-design.md). Pick a starter, land on a node of a branching act shown on a flat act map, clear nodes under worsening weather, draft rewards, and beat the boss. Meta points earned across runs buy unlocks. A second mode, **hub mode**, keeps one colony for the whole run and sends teams out to a frontier that keeps spreading outward.
 
 ## Build
 
@@ -30,6 +30,17 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
 7. Then pick your next node from the cards (one per connected node), and pack on the packing screen: item tiles by category (click to add, right-click to remove, shift for all or none), **Essentials** and **Most valuable** presets, and a carry meter that won't let you pack past what the squad and pack animals can carry. **Back to the node choice** returns to the cards. The squad goes straight into the chosen node, no travel. Choosing a node skips its siblings. Closed the cards by accident? Use **Leave node now** on the completion letter.
 8. Beating an act boss gives a card and lays out the next, harder act nearby. The run is won on the act-3 boss and lost on a squad wipe, a failed escort, or leaving a node early. The end-of-run screen shows stats and points, with **New run** to start again on the same world: choose a starter (last run's is preselected), then ideoligion and squad.
 
+### Hub mode
+
+Pick **Hub: one colony, an endless frontier** under the starter cards (the choice is remembered). Then:
+
+1. Choose your hub from three hub-site cards. It's your colony for the whole run, with no objective of its own. Four frontier nodes appear around it.
+2. **Frontier map** (hub panel, or the World button): the act map drawn radially. Your hub sits in the centre and each step out is a ring; scroll to zoom and drag to pan. **Send a team** (top right, on the hub): pick a frontier node from its card, then pick who goes on the packing screen (click portraits). Everyone else keeps the hub running. Only one team can be out on the frontier at a time.
+3. The team plays the node as usual. Afterwards it picks a reward and packs for home. Map-less nodes (events, merchants, rest sites, treasure) send the team straight home. **Pull back to hub** leaves a node early: no reward, and the node stays open. Failing a node reopens it too. Only losing every colonist ends the run.
+4. Clearing a node reveals 2–3 more further out, harder with each step (depth). One of the nodes at depth 3, 6, 9… is an elite, and depths 5 and 10 hold a single boss. The final boss waits at depth 15. Beating it wins the run, and **Keep going** carries on endless.
+5. The hub's weather keeps worsening until frontier nodes push it back: quick nodes halve it, while expeditions, elites and bosses break it (a new one rolls in after a grace period). Sieges hit the hub every 12 days, announced a day ahead.
+6. **Harvest trip**: send a side team back to a cleared node (not an enemy base). Its map comes back fresh with no objective, clock, reward or weather relief.
+
 **Meta points:** +1 per node cleared, +5 per boss, +1 per skipped reward. Spend them from the end-of-run screen or in **Options → Mod settings → Roguelike** on starters, extra relics/blueprints/gear in the pools, and permanent bonuses. Progress is stored in the mod settings file, not in saves. Winning unlocks the next **Ascension** level (up to 5), chosen in the same list; each level stacks a handicap.
 
 Debug helpers (Development mode): the caravan float menu has **(Dev: instantly)**; debug actions **Roguelike → Enter test node...**, **Complete node objective**, **Advance threat 1 day**.
@@ -46,7 +57,7 @@ All content is XML in `Defs/`, no recompile needed:
 
 Art is generated, no assets are copied from anywhere: `Tools/make-node-icons.ps1` (world-map node icons), `Tools/make-unlock-icons.ps1` (unlock and starter badges) and `Tools/make-mod-art.ps1` (`About/ModIcon.png` and `About/Preview.png`). UI textures are made in code (`Source/Style.cs`).
 
-Act shape (row sizes) is in `Source/RunMap.cs`; the act map screen is `Source/RunMapScreen.cs`.
+Act shape (row sizes) is in `Source/RunMap.cs`; the act map screen is `Source/RunMapScreen.cs`; hub-mode depths, siege timing and frontier layout are in `Source/Hub.cs`.
 
 ## Self-test
 
@@ -65,6 +76,7 @@ Act shape (row sizes) is in `Source/RunMap.cs`; the act map screen is `Source/Ru
 | `newrun` | Wipe, vanilla game-over suppressed, New colony and New run open the starter cards, then the ideoligion and squad cards, into a fresh run with exactly the chosen squad and ideoligion |
 | `disasters` | Meteor aftermath, tornado, hurricane, tidal surge |
 | `polish` | Node icons, act map (covers the world, World button), HUD panel, relic rarity |
+| `hub` | Hub mode: hub sites, frontier reveal and depth rules, team split, return home, pull back and failure, hub weather relief, map-less nodes, harvest trips, sieges, save and load, final boss and endless |
 
 ## Known gaps
 

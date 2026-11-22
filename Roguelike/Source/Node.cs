@@ -21,7 +21,7 @@ namespace Roguelike
     }
 
     /// <summary>Expedition: build up a camp under a clock. Combat nodes: kill the enemy. Escort: keep someone alive. Event: a choice, no map.</summary>
-    public enum NodeKind { Expedition, CombatAlerted, CombatUnaware, Escort, Event, Elite, Rest, Merchant, Treasure }
+    public enum NodeKind { Expedition, CombatAlerted, CombatUnaware, Escort, Event, Elite, Rest, Merchant, Treasure, Hub }
 
     public enum ObjectiveKind { Stockpile, Survive, Build, KillAll, Escort, Requirements }
 
@@ -63,6 +63,7 @@ namespace Roguelike
         /// stays open for them, with the weather worsening at full speed, until the squad leaves.
         /// </summary>
         public List<NodeRequirement> stretchGoals = new List<NodeRequirement>();
+        private static bool HubRun => WorldComponent_RoguelikeRun.Get is { active: true, hubMode: true };
         /// <summary>Mineable resources the objective needs (e.g. components): the node map gets enough ore to mine them.</summary>
         public List<ThingDefCountClass> ensureMineable = new List<ThingDefCountClass>();
 
@@ -155,6 +156,13 @@ namespace Roguelike
         {
             var lines = new List<string>();
             if (!HasMap) { lines.Add("Resolves when you arrive: no map, no clock"); return lines; }
+            if (kind == NodeKind.Hub)
+            {
+                lines.Add("Your colony for the whole run");
+                lines.Add("Send teams out to a frontier that keeps spreading");
+                lines.Add("Clearing nodes pushes back the weather here");
+                return lines;
+            }
             if (objective == ObjectiveKind.Requirements)
             {
                 lines.AddRange(requirements.Where(r => r.kind != RequirementKind.NoDeaths).Select(r => r.Card(squad)));
@@ -179,8 +187,8 @@ namespace Roguelike
 
         /// <summary>What ends the run here besides leaving early, for a card's warning line.</summary>
         public string DangerLine =>
-            objective == ObjectiveKind.Escort ? "If the refugee dies, the run ends"
-            : requirements.Any(r => r.kind == RequirementKind.NoDeaths) ? "If anyone dies, the run ends"
+            objective == ObjectiveKind.Escort ? (HubRun ? "If the refugee dies, the node fails" : "If the refugee dies, the run ends")
+            : requirements.Any(r => r.kind == RequirementKind.NoDeaths) ? (HubRun ? "If anyone dies, the node fails" : "If anyone dies, the run ends")
             : null;
 
         private string PerDayText(GameConditionDef modifier)
@@ -198,6 +206,8 @@ namespace Roguelike
         public string BriefingFor(GameConditionDef modifier, int squad)
         {
             if (!HasMap) return description + "\n\nResolves when your caravan arrives. No map, no clock.";
+            if (kind == NodeKind.Hub)
+                return description + (modifier != null ? $"\n\n{modifier.LabelCap}: holds off for {GraceFor(modifier):0.#} days, then worsens by about {PerDayText(modifier)} per day until frontier nodes push it back." : "");
             var sb = new StringBuilder(description);
             sb.Append($"\n\nObjective: {ObjectiveTextFor(squad)}.");
             if (objective == ObjectiveKind.Requirements && squad > 0) sb.Append($" (Counts are for a squad of {squad}.)");
@@ -216,9 +226,8 @@ namespace Roguelike
                           "It worsens slower while you're ahead of pace and faster while you're behind.");
             }
             else if (randomModifier) sb.Append("\n\nWeather: a modifier that fits the local climate.");
-            if (objective == ObjectiveKind.Escort) sb.Append("\n\nIf the refugee dies, the run ends.");
-            if (requirements.Any(r => r.kind == RequirementKind.NoDeaths)) sb.Append("\n\nIf anyone dies here, the run ends.");
-            sb.Append("\n\nLeaving before the objective is met ends the run.");
+            if (DangerLine != null) sb.Append($"\n\n{DangerLine}.");
+            sb.Append(HubRun ? "\n\nYou can pull back to the hub before the objective is met; the node stays open, with no reward." : "\n\nLeaving before the objective is met ends the run.");
             return sb.ToString();
         }
 
@@ -782,7 +791,8 @@ namespace Roguelike
         {
             failed = true;
             var run = Run;
-            if (run != null && run.NodeAt(map.Tile)?.state == RunNodeState.Current) run.Lose(reason);
+            if (run is { hubMode: true } && run.NodeAt(map.Tile) is { state: RunNodeState.Current } node) Hub.Failed(run, node, reason);
+            else if (run != null && run.NodeAt(map.Tile)?.state == RunNodeState.Current) run.Lose(reason);
             else Messages.Message(reason, MessageTypeDefOf.NegativeEvent);
         }
 
@@ -802,6 +812,8 @@ namespace Roguelike
             string text = StretchOpen
                 ? $"You've met this node's objective.\n\nYou can stay for the stretch goals ({StretchMet}/{preset.stretchGoals.Count} met; each levels up a pawn), " +
                   "but the weather now worsens at full speed. Use Leave node now (or the button under the node panel) when you're ready to go."
+                : run is { hubMode: true }
+                ? "You've met this node's objective.\n\nPack what the team and its pack animals can carry and head home to the hub. Everything else stays behind.\n\nIf you closed the packing screen, use Return to hub (top right) or Leave node now."
                 : "You've met this node's objective.\n\nChoose your next node, then pack what your pawns and pack animals can carry. Everything else stays behind."
                   + (lastBoss ? "" : "\n\nIf you closed the node choice, use Leave node now to bring it back.");
             var letter = (Letter_NodeComplete)LetterMaker.MakeLetter("Node complete", text, RoguelikeDefOf.Roguelike_NodeComplete);
@@ -811,8 +823,9 @@ namespace Roguelike
 
         public override void MapComponentOnGUI()
         {
-            if (Active && map == Find.CurrentMap && !WorldRendererUtility.WorldSelected && Find.UIRoot.screenshotMode?.FiltersCurrentEvent != true)
-                NodeHud.Draw(this);
+            if (map != Find.CurrentMap || WorldRendererUtility.WorldSelected || Find.UIRoot.screenshotMode?.FiltersCurrentEvent == true) return;
+            if (Active) NodeHud.Draw(this);
+            HubHud.Draw(map, this);
         }
 
         public override void ExposeData()

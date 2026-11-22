@@ -33,6 +33,9 @@ namespace Roguelike
         public GameConditionDef modifier;
         /// <summary>Its objective has been shown on a next-node card (and is now fixed).</summary>
         public bool offered;
+        /// <summary>Hub mode: nodes out from the hub (0 for hub sites) and the node that revealed this one.</summary>
+        public int depth;
+        public int parent = -1;
 
         public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, SquadSize);
 
@@ -49,9 +52,11 @@ namespace Roguelike
         {
             RunRewardKind.Recruits => $"Choose 1 of {Choices} recruits",
             RunRewardKind.Relics => $"Choose 1 of {Choices} relics",
-            RunRewardKind.Cards => IsBoss ? "A card, then the next act" : $"Choose 1 of {Choices} cards",
-            _ => IsBoss ? "Wins the run" : preset.HasMap ? "None" : "Whatever you find here",
+            RunRewardKind.Cards => IsBoss && !HubRun ? "A card, then the next act" : $"Choose 1 of {Choices} cards",
+            _ => IsBoss ? "Wins the run" : preset.kind == NodeKind.Hub ? "Your colony for the whole run" : preset.HasMap ? "None" : "Whatever you find here",
         };
+
+        private static bool HubRun => WorldComponent_RoguelikeRun.Get?.hubMode == true;
 
         public GameConditionDef Weather => preset.randomModifier ? modifier : preset.condition;
 
@@ -78,7 +83,7 @@ namespace Roguelike
         {
             RunRewardKind.Recruits => $"Reward: choose 1 of {Choices} recruits.",
             RunRewardKind.Relics => $"Reward: choose 1 of {Choices} relics.",
-            RunRewardKind.Cards => IsBoss ? "Reward: choose a card, then the next act begins." : $"Reward: choose 1 of {Choices} cards (relic, gear, implant or blueprint).",
+            RunRewardKind.Cards => IsBoss && !HubRun ? "Reward: choose a card, then the next act begins." : $"Reward: choose 1 of {Choices} cards (relic, gear, implant or blueprint).",
             _ => IsBoss ? "Reward: wins the run." : "Reward: none (events resolve on the spot).",
         };
 
@@ -95,6 +100,8 @@ namespace Roguelike
             Scribe_Defs.Look(ref preset, "preset");
             Scribe_Defs.Look(ref modifier, "modifier");
             Scribe_Values.Look(ref offered, "offered");
+            Scribe_Values.Look(ref depth, "depth");
+            Scribe_Values.Look(ref parent, "parent", -1);
             Scribe_Collections.Look(ref next, "next", LookMode.Value);
             next ??= new List<int>();
         }
@@ -110,9 +117,9 @@ namespace Roguelike
         private static readonly int[] RowSizes = { 3, 3, 3, 3, 2, 1 };
         public static int RowCount => RowSizes.Length;
         /// <summary>Node tiles stay this far apart, so enemy bases and node maps never sit side by side.</summary>
-        private const float MinNodeGapTiles = 3f;
+        internal const float MinNodeGapTiles = 3f;
         /// <summary>The first landing only uses the friendlier biomes (vanilla's settlement weight at least this).</summary>
-        private const float LandingBiomeWeight = 0.5f;
+        internal const float LandingBiomeWeight = 0.5f;
 
         public bool active;
         public bool runWon;
@@ -139,7 +146,20 @@ namespace Roguelike
 
         public const int ActsPerRun = 3;
 
-        public bool RunOver => runWon || runLost;
+        /// <summary>Hub mode: one permanent colony and an outward frontier (see <see cref="Hub"/>).</summary>
+        public bool hubMode;
+        /// <summary>Hub mode: the final boss is beaten and the player chose to keep going.</summary>
+        public bool endless;
+        public int hubNodeId = -1;
+        public int deepestCleared;
+        /// <summary>Hub mode: node whose team should be offered the trip home once nothing else is showing.</summary>
+        public int pendingReturnNodeId = -1;
+        public HubPressure pressure = new HubPressure();
+
+        public RunNode HubNode => hubMode ? NodeById(hubNodeId) : null;
+        public Map HubMap => HubNode is { } h ? Current.Game.FindMap(h.tile) : null;
+
+        public bool RunOver => runLost || runWon && !endless;
 
         // ---------- Relics and blueprints ----------
 
@@ -197,6 +217,12 @@ namespace Roguelike
         /// <summary>Queues the "choose your next node" screen; it opens once no other run dialog is showing.</summary>
         public void RequestNextPick(RunNode from)
         {
+            if (hubMode)
+            {
+                // Hub mode: after a node, the team heads home instead.
+                if (from != null && !RunOver) pendingReturnNodeId = from.id;
+                return;
+            }
             if (from != null && !RunOver && from.next.Any(id => NodeById(id)?.state == RunNodeState.Available)) pendingPickNodeId = from.id;
         }
 
@@ -306,20 +332,23 @@ namespace Roguelike
         /// <summary>Called once the player has landed on a starting node.</summary>
         public RunNode BeginAt(PlanetTile tile)
         {
+            if (hubMode) return Hub.Begin(this, tile);
             var start = NodeAt(tile);
             if (start == null || start.row != 0) return null;
             Choose(start);
             return start;
         }
 
-        public bool CanEnter(RunNode node) => active && !RunOver && node != null && node.state == RunNodeState.Available;
+        public bool CanEnter(RunNode node) => active && !RunOver && node != null && node.state == RunNodeState.Available
+                                              && (!hubMode || node.depth > 0 && Hub.TeamAway(this) == null && Current.Game.FindMap(node.tile) == null);
 
         /// <summary>Ends the run as a loss: a squad wipe, or leaving the current node before its objective was met.</summary>
         public void Lose(string reason)
         {
             if (!active || RunOver) return;
             runLost = true;
-            MetaProgress.RecordRunEnd(false);
+            // An endless hub run was already recorded as a win.
+            if (!runWon) MetaProgress.RecordRunEnd(false);
             Find.WindowStack.Add(new Dialog_RunEnd(false, reason));
         }
 
@@ -332,6 +361,11 @@ namespace Roguelike
                 return;
             }
             ApplyRelicHediffs();
+            if (hubMode)
+            {
+                Hub.Tick(this);
+                return;
+            }
             // Everyone left the current node before its objective was met: its map is gone, or (for the starting
             // settlement, which stays loaded) nobody of ours is left on it, not even in an incoming drop pod.
             var current = CurrentNode;
@@ -345,8 +379,10 @@ namespace Roguelike
         /// <summary>The player commits to <paramref name="node"/>; every other open choice is skipped.</summary>
         public void Choose(RunNode node)
         {
-            foreach (var n in nodes.Where(n => n.state == RunNodeState.Available && n != node)) n.state = RunNodeState.Skipped;
             node.state = RunNodeState.Current;
+            // Hub mode: the rest of the frontier stays open, and difficulty follows the node's depth.
+            if (hubMode) act = node.act;
+            else foreach (var n in nodes.Where(n => n.state == RunNodeState.Available && n != node)) n.state = RunNodeState.Skipped;
         }
 
         /// <summary>Objective met on the node at <paramref name="tile"/>: unlock its next nodes, or win on the boss.</summary>
@@ -354,6 +390,11 @@ namespace Roguelike
         {
             var node = NodeAt(tile);
             if (!active || RunOver || node == null || node.state != RunNodeState.Current) return;
+            if (hubMode)
+            {
+                Hub.Completed(this, node);
+                return;
+            }
             node.state = RunNodeState.Completed;
             int points = node.IsBoss ? 5 : 1;
             pointsEarned += points;
@@ -378,7 +419,7 @@ namespace Roguelike
         }
 
         /// <summary>The node's objective is done but stretch goals are left: the squad stays until it chooses to leave.</summary>
-        private static bool StaysForStretch(RunNode node) =>
+        internal static bool StaysForStretch(RunNode node) =>
             Current.Game.FindMap(node.tile)?.GetComponent<MapComponent_RoguelikeNode>() is { StretchOpen: true };
 
         /// <summary>One level-up: pick 1 of a few upgrades, each for a squad member.</summary>
@@ -408,6 +449,8 @@ namespace Roguelike
         public bool GenerateAct()
         {
             RemoveFactionSettlements();
+            hubMode = false;
+            if (MetaProgress.HubMode) return Hub.Generate(this);
             var byBiome = TilesByBiome();
             for (int attempt = 0; attempt < 5; attempt++)
             {
@@ -455,7 +498,7 @@ namespace Roguelike
         }
 
         /// <summary>Every tile a node could use, grouped by biome.</summary>
-        private static Dictionary<BiomeDef, List<PlanetTile>> TilesByBiome()
+        internal static Dictionary<BiomeDef, List<PlanetTile>> TilesByBiome()
         {
             var grid = Find.WorldGrid;
             var surface = grid.Surface;
@@ -513,10 +556,14 @@ namespace Roguelike
         /// <summary>Elite and boss nodes marked as assaults become bases of hostile factions.</summary>
         private void PlaceEnemyBases()
         {
-            foreach (var n in nodes.Where(n => n.preset.assault))
+            foreach (var n in nodes.Where(n => n.preset.assault)) PlaceEnemyBase(n);
+        }
+
+        public void PlaceEnemyBase(RunNode n)
+        {
             {
                 var faction = Find.FactionManager.RandomEnemyFaction(allowNonHumanlike: false);
-                if (faction == null) continue;
+                if (faction == null) return;
                 var settlement = (Settlement)WorldObjectMaker.MakeWorldObject(WorldObjectDefOf.Settlement);
                 settlement.SetFaction(faction);
                 settlement.Tile = n.tile;
@@ -569,13 +616,26 @@ namespace Roguelike
 
         private void AssignPresets()
         {
-            var all = DefDatabase<NodePresetDef>.AllDefsListForReading;
             foreach (var n in nodes)
             {
-                float temp = Find.WorldGrid[n.tile].temperature;
                 // Starting nodes are always expeditions (the landing site is a fresh camp); later rows mix node kinds.
                 var kind = n.IsBoss ? (NodeKind?)null : n.row == 0 ? NodeKind.Expedition
                     : (n.row == RowSizes.Length - 2 ? PreBossRowKinds : MiddleRowKinds).RandomElementByWeight(k => k.weight).kind;
+                AssignPreset(n, kind);
+                // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
+                n.reward = n.IsBoss ? (n.act < ActsPerRun ? RunRewardKind.Cards : RunRewardKind.None)
+                    : !n.preset.HasMap ? RunRewardKind.None
+                    : n.preset.kind == NodeKind.Elite ? RunRewardKind.Relics
+                    : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
+            }
+        }
+
+        /// <summary>Picks a preset of <paramref name="kind"/> (a boss preset for null on a boss node) that fits the tile and differs from its siblings'.</summary>
+        public void AssignPreset(RunNode n, NodeKind? kind)
+        {
+            var all = DefDatabase<NodePresetDef>.AllDefsListForReading;
+            {
+                float temp = Find.WorldGrid[n.tile].temperature;
                 // Gated objectives (blueprints/research) only appear later, when offered; the season must suit crop objectives.
                 var pool = all.Where(p => p.isBoss == n.IsBoss && (kind == null || p.kind == kind) && !p.Gated && (n.row > 0 || p.requiresSkill == null) && p.Eligible(this, n.tile, null).Accepted).ToList();
                 if (pool.Count == 0) pool = all.Where(p => !p.isBoss && p.kind == NodeKind.Expedition).ToList();
@@ -590,11 +650,6 @@ namespace Roguelike
                 if (fresh.Count > 0) options = fresh;
                 n.preset = options.RandomElementByWeight(p => p.weight);
                 if (n.preset.randomModifier) n.modifier = ModifierPool.PickFor(n.tile);
-                // Events resolve on the spot; about a quarter of other middle nodes offer recruits instead of a mixed card draw.
-                n.reward = n.IsBoss ? (n.act < ActsPerRun ? RunRewardKind.Cards : RunRewardKind.None)
-                    : !n.preset.HasMap ? RunRewardKind.None
-                    : n.preset.kind == NodeKind.Elite ? RunRewardKind.Relics
-                    : n.row > 0 && Rand.Chance(0.25f) ? RunRewardKind.Recruits : RunRewardKind.Cards;
             }
         }
 
@@ -624,6 +679,7 @@ namespace Roguelike
             // The world map is never shown during a run: whenever it would be, the flat act map covers it.
             if (WorldRendererUtility.WorldSelected && Current.ProgramState == ProgramState.Playing && Find.WindowStack.WindowOfType<Dialog_RunMap>() == null)
                 Find.WindowStack.Add(new Dialog_RunMap(coversWorld: true));
+            if (hubMode) Hub.Update(this);
         }
 
         public override void ExposeData()
@@ -639,6 +695,13 @@ namespace Roguelike
             Scribe_Values.Look(ref ascension, "ascension");
             Scribe_Values.Look(ref writUsedAct, "writUsedAct");
             Scribe_Values.Look(ref codexTile, "codexTile", PlanetTile.Invalid);
+            Scribe_Values.Look(ref hubMode, "hubMode");
+            Scribe_Values.Look(ref endless, "endless");
+            Scribe_Values.Look(ref hubNodeId, "hubNodeId", -1);
+            Scribe_Values.Look(ref deepestCleared, "deepestCleared");
+            Scribe_Values.Look(ref pendingReturnNodeId, "pendingReturnNodeId", -1);
+            Scribe_Deep.Look(ref pressure, "pressure");
+            pressure ??= new HubPressure();
             Scribe_Collections.Look(ref relics, "relics", LookMode.Def);
             Scribe_Collections.Look(ref blueprints, "blueprints", LookMode.Def);
             relics ??= new List<RelicDef>();
@@ -665,6 +728,7 @@ namespace Roguelike
                 return n.state switch
                 {
                     RunNodeState.Current => name + " (here)",
+                    RunNodeState.Completed when n.preset.kind == NodeKind.Hub => name,
                     RunNodeState.Completed => name + " (cleared)",
                     RunNodeState.Skipped => name + " (skipped)",
                     _ => name,
@@ -707,7 +771,9 @@ namespace Roguelike
             if (marker == null || !marker.Spawned || run == null || node == null) return false;
             if (run.RunOver) return FloatMenuAcceptanceReport.WithFailReason("run is over");
             if (node.state == RunNodeState.Current) return FloatMenuAcceptanceReport.WithFailReason("you are already here");
-            if (node.state != RunNodeState.Available) return FloatMenuAcceptanceReport.WithFailReason("not connected to your current node");
+            if (node.state != RunNodeState.Available) return FloatMenuAcceptanceReport.WithFailReason(run.hubMode ? "not on the open frontier" : "not connected to your current node");
+            if (run.hubMode && Hub.TeamAway(run) != null) return FloatMenuAcceptanceReport.WithFailReason("another team is already out on the frontier");
+            if (run.hubMode && Current.Game.FindMap(node.tile) != null) return FloatMenuAcceptanceReport.WithFailReason("your last team there hasn't left yet");
             return true;
         }
 
