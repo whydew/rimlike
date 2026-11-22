@@ -28,6 +28,7 @@ namespace Roguelike
         private readonly string subtitle;
         private readonly Action<RewardCard> onPicked;
         private readonly bool allowSkip;
+        private readonly string skipLabel;
         private readonly string title;
         private readonly float[] hover;
         private readonly float[] hoverStart;
@@ -39,9 +40,10 @@ namespace Roguelike
         private bool burst;
         private bool resolved;
 
-        public Dialog_RewardPick(List<RewardCard> cards, string subtitle, Action<RewardCard> onPicked, bool allowSkip = true, string title = "Choose a reward")
+        public Dialog_RewardPick(List<RewardCard> cards, string subtitle, Action<RewardCard> onPicked, bool allowSkip = true, string title = "Choose a reward", string skipLabel = "Skip reward")
         {
             this.allowSkip = allowSkip;
+            this.skipLabel = skipLabel;
             this.title = title;
             this.cards = cards;
             this.subtitle = subtitle;
@@ -202,7 +204,7 @@ namespace Roguelike
             {
                 var skipRect = new Rect(inRect.center.x - 90f, y0 + CardHeight + 44f, 180f, 38f);
                 GUI.color = new Color(1f, 1f, 1f, Style.EaseOutCubic((t - 0.6f) / 0.4f));
-                if (Widgets.ButtonText(skipRect, "Skip reward")) Skip();
+                if (Widgets.ButtonText(skipRect, skipLabel)) Skip();
                 GUI.color = Color.white;
             }
             // Choosing the next node: the whole act can be looked over first.

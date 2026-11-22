@@ -103,7 +103,7 @@ namespace Roguelike
             {
                 Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.UpperRight;
-                Style.ShadowLabel(new Rect(inner.x, inner.y + 3f, inner.width, 18f), $"ACT {run.act} · ROW {node.row + 1}", new Color(accent.r, accent.g, accent.b, 0.9f));
+                Style.ShadowLabel(new Rect(inner.x, inner.y + 3f, inner.width, 18f), run.hubMode ? $"DEPTH {node.depth}" : $"ACT {run.act} · ROW {node.row + 1}", new Color(accent.r, accent.g, accent.b, 0.9f));
                 Text.Anchor = TextAnchor.UpperLeft;
             }
 

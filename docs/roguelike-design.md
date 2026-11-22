@@ -218,3 +218,64 @@ Brainstorm outcome. Base building is a core RimWorld experience and stays; the o
 | **3. Pawn level-ups** | Each stretch goal met opens a level-up card pick (the reward screen's card count): a good trait, a passion step, +4 in a skill, or losing a bad trait, each for a named squad member | ✅ Done (2026-11-22, in-game self-test) |
 | **4. Telegraphed raids** | Every expedition raids every 6 days (stone fortress 5). Each raid (and camp reinforcements) is rolled ahead: arrival time, entry cell and strength, with an estimated raider count. The HUD shows "Raid in 2 days from the north, ~5"; a red ring marks the entry once under two days away; the raid arrives exactly there. Storyteller raids that aren't forced are blocked on node maps | ✅ Done (2026-11-22, in-game self-test) |
 | **5. Scars and wear** | Injuries already carry over. Road wear: +0.1 to each squad member per cleared map node (any length), stages at 0.2/0.4/0.6/0.8 cutting work speed, then movement, then consciousness; the rest site's Rest clears it | ✅ Done (2026-11-22, in-game self-test) |
+
+## Hub mode (second game mode, brainstorm 2026-11-22)
+
+A second run mode. Instead of moving the whole squad to a fresh node each time, the run keeps **one permanent hub colony** and sends strike teams out to nodes that keep spreading outward from it. The classic mode stays as is; the mode is picked during setup.
+
+Pillar changes: "every camp is disposable" becomes "one camp, kept for the whole run". The squad-as-deck, drafting and clock pillars carry over.
+
+### Hub
+
+- One hub map for the whole run, with full base building. It never gets deleted.
+- **The hub keeps running while teams are away** (vanilla multi-map). The player splits colonists between who goes out and who stays to defend and work.
+- The hub is a normal starting tile, picked from three hub-site cards. Nodes supply what it lacks (each frontier biome has its own resources), and the carry limit decides what comes home. A deliberately poor hub tile was left out for now.
+
+### Frontier map
+
+- The hub starts with 3–4 nodes around it. **Clearing a node reveals 2–3 new nodes further out**, so the map spreads outward for the whole run.
+- **Difficulty and reward grow with distance from the hub.** Travel stays instant; distance does not cost days.
+- Elites at set distances (e.g. every 3), bosses at every 5. Bosses at 5 and 10 are checkpoints.
+- **Win:** beat the final boss (distance 15). The player can then keep going endless, scored by furthest distance reached.
+
+### Nodes
+
+- A mix of **quick nodes** (combat, raid, event, salvage, rescue; a few days) and **mini-expeditions** (a small outpost and an objective). Rewards and hub-pressure relief are weighted by length: longer nodes give more.
+- **Cleared nodes become harvest sites:** they can be revisited with no objective, no reward card and no pressure relief, just to mine, hunt or gather. It's meant for mid–late game, when the colony has enough pawns to send a side team.
+
+### Pressure
+
+- **The hub always has one threat modifier** (cold, toxic, psychic, meteors…) ramping on the usual curve.
+- **Finishing a frontier node pushes it back:** quick nodes partway, mini-expeditions fully. After a full clear the hub rolls a new modifier after a grace period. This forces the player to keep going out.
+- Announced siege raids on the hub, scaling with distance reached or days played.
+
+### Roadmap
+
+| Stage | Scope | Gate | Status |
+|---|---|---|---|
+| **H0. Persistent hub** | Hub map survives a trip; send a chosen team to one node and back; hub keeps running | Does out-and-back with a live hub feel good? | ✅ Built (2026-11-22, in-game self-test) |
+| **H1. Frontier** | Distance-based node graph that reveals children on clear, drawn on the world map; elites and bosses at set distances | Does pushing outward feel like progress? | ✅ Built (2026-11-22, in-game self-test) |
+| **H2. Hub pressure** | Hub modifier with length-weighted knockback and re-roll; siege raids | Does the pressure push players out without feeling unfair? | ✅ Built (2026-11-22, in-game self-test) |
+| **H3. Harvest sites** | Cleared nodes revisitable with no objective | Are side teams worth sending? | ✅ Built (2026-11-22, in-game self-test) |
+| **H4. Win and endless** | Final boss at distance 15, continue option, meta points, mode pick in setup | Is a full hub run worth starting? | ✅ Built (2026-11-22, in-game self-test) |
+
+The playtest gates are still open: all five stages were built in one pass and checked by the `hub` self-test, not by play.
+
+Reuses: node presets, objectives, rewards and drafting, packing, threat modifiers, HUD, meta unlocks. New: hub map lifetime, frontier generator, team split, return-to-hub flow, hub modifier, mode select.
+
+### Implementation notes (2026-11-22)
+
+Built on the overhaul's flat act map. Code: `Source/Hub.cs` (generation, trips, hub weather, sieges, HUD), the radial frontier in `RunMapScreen.cs`, with hooks in `RunMap.cs`, `Node.cs`, `Packing.cs`, `Setup.cs`, `Meta.cs`. Self-test: `Source/SelfTestHub.cs`. Choices made while building:
+
+- **Mode pick:** two buttons under the starter cards (Classic / Hub), remembered in the mod settings and read at world generation.
+- **Landing:** three hub-site cards. The two you don't pick are dropped, and four depth-1 nodes appear around the hub.
+- **One frontier team at a time.** Harvest trips don't count toward that limit, so a side team can go out while the frontier team is away.
+- **Trips:** Send a team (hub panel) → node cards → packing screen with a team picker (by default every colonist but one goes; animals stay). After a node: reward, then the packing screen home. Map-less nodes send the caravan straight home. Return to hub / Pull back to hub buttons sit under the panel on away maps.
+- **Failing or pulling back doesn't end a hub run.** The node reopens once the team is home, with no reward. Only losing every colonist ends the run.
+- **Frontier map:** the act map's style, drawn radially. The hub sits in the centre with one dotted ring per depth (boss depths in red). Each node gets a slice of its parent's angle, weighted so open nodes sit evenly along their rings, so branches fan outward without crossing. Scroll to zoom and drag to pan, since the frontier never ends. It opens from the World button, the Frontier map button on the hub panel, or Act map on a node.
+- **Depth:** like classic nodes, each hub site and frontier node is a random tile in a random biome on the hidden planet (hub sites keep to mild biomes, and siblings avoid each other's biomes). At boss depths (every 5) a node reveals one boss; at elite depths (every 3) one of its 2–3 children is an elite. Difficulty tier = 1 + (depth − 1) / 5 and drives raid and weather scaling (the classic act factor).
+- **Rewards by length:** expeditions and elites offer relics and give 2 points; other fights give cards (30% recruits) and 1 point; bosses give cards and 5 points. Expeditions use the overhaul's short objective plus stretch goals: the team can stay for them, then leaves with Return to hub or Leave node. Requirement counts already scale with the smaller team.
+- **Hub weather:** a quick node halves it; an expedition, elite or boss ends it, and a new modifier starts with a fresh grace period. It speeds up 10% per depth cleared.
+- **Sieges:** the first comes on day 15, then one every 12 days, with a letter a day before. Strength grows with depth cleared, the number of sieges so far, and Ascension 2+. Vanilla storyteller raids still happen as usual.
+- **Harvest sites:** cleared nodes that have a map, except enemy bases. They get a fresh map with no objective, clock or reward.
+- **Win:** the depth-15 boss records a win; Keep going makes the run endless. A later wipe ends it without counting as another run.

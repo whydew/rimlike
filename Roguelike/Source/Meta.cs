@@ -39,6 +39,8 @@ namespace Roguelike
         /// <summary>Highest Ascension level unlocked (win at your highest level to unlock the next) and the one chosen for new runs.</summary>
         public int maxAscension;
         public int selectedAscension;
+        /// <summary>Game mode for new runs: false = classic acts, true = hub mode (one colony, an outward frontier).</summary>
+        public bool hubMode;
 
         public override void ExposeData()
         {
@@ -49,6 +51,7 @@ namespace Roguelike
             Scribe_Values.Look(ref maxAscension, "maxAscension");
             Scribe_Values.Look(ref selectedAscension, "selectedAscension");
             Scribe_Collections.Look(ref disabled, "disabled", LookMode.Value);
+            Scribe_Values.Look(ref hubMode, "hubMode");
             unlocked ??= new List<string>();
             disabled ??= new List<string>();
         }
@@ -137,6 +140,9 @@ namespace Roguelike
 
         public static int SelectedAscension => Mathf.Clamp(S.selectedAscension, 0, S.maxAscension);
 
+        /// <summary>The mode chosen for new runs (read when the world is generated).</summary>
+        public static bool HubMode => S.hubMode;
+
         public static void RecordRunEnd(bool won, int ascension = 0)
         {
             S.runs++;
@@ -158,6 +164,7 @@ namespace Roguelike
             S.unlocked.Clear();
             S.disabled.Clear();
             S.maxAscension = S.selectedAscension = 0;
+            S.hubMode = false;
             ScenarioLister.MarkDirty();
         }
     }
@@ -532,10 +539,14 @@ namespace Roguelike
             // Stats appear one after another; the points count up.
             int earned = run?.pointsEarned ?? 0;
             int shown = Mathf.RoundToInt(earned * Style.EaseOutCubic((t - 1.3f) / 1.2f));
+            bool hub = run?.hubMode == true;
+            string asc = run != null && run.ascension > 0 ? $" at Ascension {run.ascension}" : "";
             var lines = new List<string>
             {
-                $"Reached act {run?.act ?? 1} of {WorldComponent_RoguelikeRun.ActsPerRun}" + (run != null && run.ascension > 0 ? $" at Ascension {run.ascension}" : ""),
-                $"Nodes cleared: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
+                hub ? $"Hub run: deepest node cleared {run.deepestCleared} (final boss at {Hub.FinalDepth}){(run.endless ? ", endless" : "")}{asc}"
+                    : $"Reached act {run?.act ?? 1} of {WorldComponent_RoguelikeRun.ActsPerRun}{asc}",
+                hub ? $"Frontier nodes cleared: {run.nodes.Count(n => n.depth > 0 && n.state == RunNodeState.Completed)} of {run.nodes.Count(n => n.depth > 0)} revealed"
+                    : $"Nodes cleared: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
                 $"Squad: {PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count()} alive",
                 $"Relics: {(run == null || run.relics.Count == 0 ? "none" : string.Join(", ", run.relics.GroupBy(r => r).Select(g => g.Key.label + (g.Count() > 1 ? $" ×{g.Count()}" : ""))))}",
                 $"Blueprints: {(run == null || run.blueprints.Count == 0 ? "none" : string.Join(", ", run.blueprints.Select(b => b.label)))}",
@@ -560,7 +571,17 @@ namespace Roguelike
             if (Style.Button(new Rect(inRect.x, y, w, 38f), "Spend points", Style.Gold)) Find.WindowStack.Add(new Dialog_Unlocks());
             if (Style.Button(new Rect(inRect.x + (w + 10f), y, w, 38f), "New run", tone)) NewRun.Start();
             if (Style.Button(new Rect(inRect.x + 2 * (w + 10f), y, w, 38f), "Main menu", Style.Parchment)) GenScene.GoToMainMenu();
-            if (Style.Button(new Rect(inRect.x + 3 * (w + 10f), y, w, 38f), "Keep playing", Style.Parchment)) Close();
+            // Hub mode: after the final boss the frontier goes on, endless.
+            bool keepGoing = won && run is { hubMode: true, endless: false };
+            if (Style.Button(new Rect(inRect.x + 3 * (w + 10f), y, w, 38f), keepGoing ? "Keep going" : "Keep playing", keepGoing ? Style.Gold : Style.Parchment)) KeepGoing();
+        }
+
+        /// <summary>Closes the screen; after a hub-mode win the run carries on as an endless run.</summary>
+        public void KeepGoing()
+        {
+            var run = WorldComponent_RoguelikeRun.Get;
+            if (won && run is { hubMode: true }) run.endless = true;
+            Close();
         }
     }
 }

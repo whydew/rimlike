@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Hub mode: the permanent colony. Never started as a node; it labels hub sites and the hub's marker. -->
+  <Roguelike.NodePresetDef>
+    <defName>Roguelike_Hub</defName>
+    <label>hub</label>
+    <description>Your colony for the whole run. Teams set out from here to a frontier of nodes that spreads outward as you clear it.</description>
+    <kind>Hub</kind>
+    <randomModifier>true</randomModifier>
+    <weight>0</weight>
+  </Roguelike.NodePresetDef>
+
+</Defs>

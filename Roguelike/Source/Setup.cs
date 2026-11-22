@@ -184,6 +184,8 @@ namespace Roguelike
 
         protected override void DrawContent(Rect area)
         {
+            DrawModeChoice(new Rect(area.center.x - 330f, area.yMax - 40f, 660f, 38f));
+            area.yMax -= 52f;
             int columns = Mathf.Clamp(Mathf.FloorToInt((area.width + 20f) / 260f), 2, 6);
             float cardW = Mathf.Min(250f, (area.width - 16f - (columns - 1) * 20f) / columns), cardH = 340f;
             int rows = Mathf.CeilToInt(scenarios.Count / (float)columns);
@@ -238,6 +240,32 @@ namespace Roguelike
             Widgets.EndScrollView();
         }
 
+        /// <summary>Classic (a run of acts) or hub mode (one colony, an outward frontier); remembered for the next run.</summary>
+        private static void DrawModeChoice(Rect r)
+        {
+            var modes = new[]
+            {
+                (hub: false, label: "Classic: travel a branching act", tip: "The whole squad moves node to node across three acts. Every camp is left behind."),
+                (hub: true, label: "Hub: one colony, an endless frontier", tip: "Keep one colony for the whole run and send teams out to nodes that spread outward from it. Clearing nodes holds back the hub's weather. Final boss at depth 15, then optionally endless."),
+            };
+            float w = (r.width - 10f) / 2f;
+            for (int i = 0; i < modes.Length; i++)
+            {
+                var m = modes[i];
+                var b = new Rect(r.x + i * (w + 10f), r.y, w, r.height);
+                bool on = MetaProgress.HubMode == m.hub;
+                if (on) Style.GlowAround(b, new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.35f), 1.15f, Style.SoftGlow);
+                if (Style.Button(b, m.label, on ? Style.Gold : Style.Parchment) && !on) SetMode(m.hub);
+                TooltipHandler.TipRegion(b, m.tip);
+            }
+        }
+
+        public static void SetMode(bool hub)
+        {
+            MetaProgress.S.hubMode = hub;
+            MetaProgress.Save();
+        }
+
         protected override bool CanDoNext() => base.CanDoNext() && selected != null;
 
         protected override void DoNext()
@@ -269,8 +297,9 @@ namespace Roguelike
         public int Selected { get => selected; set => selected = value; }
 
         public override string PageTitle => "Choose where to land";
-        protected override string Heading => "Choose where to land";
-        protected override string Subheading => "Your first node. The rest of the run branches out from here.";
+        private static bool HubRun => WorldComponent_RoguelikeRun.Get?.hubMode == true;
+        protected override string Heading => HubRun ? "Choose your hub" : "Choose where to land";
+        protected override string Subheading => HubRun ? "Your colony for the whole run. The frontier spreads out from here." : "Your first node. The rest of the run branches out from here.";
         protected override string NextLabel => "Land here";
         protected override bool NextReady => selected >= 0;
 

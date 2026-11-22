@@ -84,6 +84,16 @@ namespace Roguelike
                 }
             }
             RelicEffects.OnRunStart(map);
+            if (run.hubMode)
+            {
+                // The hub has no objective: it's home. The frontier is where the objectives are.
+                Find.LetterStack.ReceiveLetter("Your hub", "This colony is yours for the whole run. Build it up.\n\n" +
+                    "Use Send a team (top right) to send colonists out to the frontier: nodes on the world map that spread outward as you clear them, " +
+                    $"harder the further out they are. Elites wait every {Hub.EliteEvery} nodes out, bosses every {Hub.BossEvery}, and the final boss at depth {Hub.FinalDepth}.\n\n" +
+                    "The hub keeps running while teams are away. Its weather keeps worsening until frontier nodes push it back, and sieges come regularly. " +
+                    "Cleared nodes can be revisited with a harvest trip for their resources.", LetterDefOf.NeutralEvent, new LookTargets(map.Center, map));
+                return;
+            }
             NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map), node.modifier);
         }
     }

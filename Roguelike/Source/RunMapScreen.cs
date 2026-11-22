@@ -29,6 +29,9 @@ namespace Roguelike
         private int hoveredId = -1;
         private bool sidesShown;
         private float hoverAmount;
+        /// <summary>Hub mode: pixels between rings (scroll to zoom) and how far the view is dragged from the hub.</summary>
+        private float ringPx = -1f;
+        private Vector2 pan;
 
         public Dialog_RunMap(bool coversWorld = false)
         {
@@ -76,7 +79,7 @@ namespace Roguelike
 
         // ---------- Node kinds ----------
 
-        public static string KindLabel(RunNode n) => n.IsBoss ? "Boss" : KindLabel(n.preset.kind);
+        public static string KindLabel(RunNode n) => n.IsBoss ? "Boss" : n.preset.kind == NodeKind.Hub ? "Your hub" : KindLabel(n.preset.kind);
 
         public static string KindLabel(NodeKind k) => k switch
         {
@@ -107,6 +110,7 @@ namespace Roguelike
             NodeKind.Rest => new Color(0.45f, 0.88f, 0.7f),
             NodeKind.Merchant => new Color(0.95f, 0.82f, 0.38f),
             NodeKind.Treasure => new Color(0.98f, 0.9f, 0.5f),
+            NodeKind.Hub => Style.Gold,
             _ => Style.Parchment,
         };
 
@@ -124,14 +128,16 @@ namespace Roguelike
             Style.Backdrop(inRect, Style.EaseOutCubic(t / 0.25f));
 
             DrawHeader(inRect, run, t);
-            float top = 132f, bottom = inRect.height - 78f;
+            // Hub mode has no act tabs and a square sheet for the rings.
+            float top = run.hubMode ? 100f : 132f, bottom = inRect.height - 78f;
             bool sides = inRect.width >= SheetMaxWidth * 0.8f + 2f * (SidePanel + 60f);
             sidesShown = sides;
-            float sheetW = Mathf.Min(SheetMaxWidth, inRect.width - (sides ? 2f * (SidePanel + 60f) : 40f));
+            float sheetW = Mathf.Min(run.hubMode ? bottom - top : SheetMaxWidth, inRect.width - (sides ? 2f * (SidePanel + 60f) : 40f));
             var sheet = new Rect(inRect.center.x - sheetW / 2f, top + (1f - Style.EaseOutCubic(t / 0.4f)) * 30f, sheetW, bottom - top);
 
             DrawSheet(sheet, t);
-            DrawGraph(sheet.ContractedBy(24f), run, t);
+            if (run.hubMode) DrawFrontier(sheet.ContractedBy(24f), run, t);
+            else DrawGraph(sheet.ContractedBy(24f), run, t);
             if (sides)
             {
                 DrawLegend(new Rect(sheet.x - SidePanel - 40f, top + 8f, SidePanel, sheet.height - 16f), run, t);
@@ -147,9 +153,21 @@ namespace Roguelike
             Style.GlowAround(new Rect(inRect.center.x - 220f, titleRect.y + 4f, 440f, 32f), new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, 0.14f * titleIn), 1.6f, Style.SoftGlow);
             Text.Font = GameFont.Medium;
             Text.Anchor = TextAnchor.MiddleCenter;
+            var current = run.CurrentNode;
+            if (run.hubMode)
+            {
+                Style.ShadowLabel(titleRect, "The frontier", new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, titleIn));
+                Text.Font = GameFont.Small;
+                string hubSub = run.RunOver ? (run.runWon ? "Run won." : "Run over.")
+                    : current != null ? $"A team is out at {(current.IsBoss ? "the boss: " : "")}{current.preset.label} (depth {current.depth})."
+                    : run.endless ? $"Endless: the deepest node you've cleared is {run.deepestCleared} out."
+                    : $"Deepest node cleared: {run.deepestCleared} of {Hub.FinalDepth}. Send a team from the hub.";
+                Style.ShadowLabel(new Rect(inRect.x, titleRect.yMax, inRect.width, 22f), hubSub, new Color(Style.Parchment.r, Style.Parchment.g, Style.Parchment.b, 0.8f * titleIn));
+                Text.Anchor = TextAnchor.UpperLeft;
+                return;
+            }
             Style.ShadowLabel(titleRect, $"Act {shownAct} of {WorldComponent_RoguelikeRun.ActsPerRun}", new Color(Style.Gold.r, Style.Gold.g, Style.Gold.b, titleIn));
             Text.Font = GameFont.Small;
-            var current = run.CurrentNode;
             string sub = run.RunOver ? (run.runWon ? "Run won." : "Run over.")
                 : shownAct < run.act ? "Behind you."
                 : shownAct > run.act ? "Ahead: you reach this act by beating the boss before it."
@@ -196,7 +214,9 @@ namespace Roguelike
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleLeft;
             var hint = new Rect(inRect.x + 40f, inRect.yMax - 58f, inRect.width - 320f, 36f);
-            Style.ShadowLabel(hint, "Hover a node for its briefing. After you clear a node, you pick the next one from the nodes it links to.", new Color(1f, 1f, 1f, 0.5f));
+            Style.ShadowLabel(hint, WorldComponent_RoguelikeRun.Get?.hubMode == true
+                ? "Hover a node for its briefing. Scroll to zoom, drag to pan. Send teams out from the hub; clearing a node opens the next ring beyond it."
+                : "Hover a node for its briefing. After you clear a node, you pick the next one from the nodes it links to.", new Color(1f, 1f, 1f, 0.5f));
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
             if (CanClose && Style.Button(new Rect(inRect.xMax - 220f, inRect.yMax - 64f, 180f, 42f), "Close", Style.Parchment)) Close();
@@ -254,6 +274,109 @@ namespace Roguelike
             hoverAmount = Mathf.MoveTowards(hoverAmount, 1f, dt * 7f);
         }
 
+        /// <summary>
+        /// Hub mode: the hub in the centre and one ring per depth. Each node owns a slice of its parent's angle, sized by
+        /// how many open branches lie beyond it, so branches fan outward without crossing however far the frontier spreads.
+        /// </summary>
+        private void DrawFrontier(Rect area, WorldComponent_RoguelikeRun run, float t)
+        {
+            var hub = run.HubNode;
+            if (hub == null) return;
+            float dt = Event.current.type == EventType.Repaint ? Mathf.Min(Time.unscaledDeltaTime, 0.05f) : 0f;
+            var shown = run.nodes.Where(n => n.state != RunNodeState.Skipped).ToList();
+            int maxDepth = Mathf.Max(3, shown.Max(n => n.depth));
+
+            // The frontier never ends, so the sheet is a window onto it: scroll to zoom, drag to pan.
+            GUI.BeginGroup(area);
+            var local = new Rect(0f, 0f, area.width, area.height);
+            if (ringPx < 0f) ringPx = Mathf.Clamp((Mathf.Min(local.width, local.height) / 2f - 34f) / maxDepth, 46f, 140f);
+            if (Mouse.IsOver(local))
+            {
+                if (Event.current.type == EventType.ScrollWheel)
+                {
+                    ringPx = Mathf.Clamp(ringPx * (1f - Event.current.delta.y * 0.04f), 20f, 140f);
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.MouseDrag && Event.current.button == 0)
+                {
+                    pan += Event.current.delta;
+                    Event.current.Use();
+                }
+            }
+            float ring = ringPx;
+            var center = local.center + pan;
+            float scale = Mathf.Clamp(ring / 90f, 0.45f, 1f); // nodes shrink as you zoom out
+
+            var pos = new Dictionary<int, Vector2>();
+            // Each open branch weighs 1/depth: its angle times its ring's radius is then the same for every branch, so
+            // nodes sit evenly spaced along their rings however deep the frontier goes.
+            var leaves = new Dictionary<int, float>();
+            float Leaves(RunNode n) => leaves.TryGetValue(n.id, out float l) ? l : leaves[n.id] = n.next.Count == 0 ? 1f / Mathf.Max(1, n.depth) : n.next.Sum(id => Leaves(run.NodeById(id)));
+            void Place(RunNode n, float a0, float a1)
+            {
+                float mid = (a0 + a1) / 2f * Mathf.Deg2Rad;
+                pos[n.id] = center + new Vector2(Mathf.Cos(mid), Mathf.Sin(mid)) * ring * n.depth;
+                float total = Leaves(n), a = a0;
+                foreach (var child in n.next.Select(run.NodeById))
+                {
+                    float span = (a1 - a0) * Leaves(child) / total;
+                    Place(child, a, a + span);
+                    a += span;
+                }
+            }
+            // Start at the top, centred on the first branch.
+            float first = hub.next.Count > 0 ? 360f * Leaves(run.NodeById(hub.next[0])) / Leaves(hub) : 0f;
+            Place(hub, -90f - first / 2f, 270f - first / 2f);
+
+            // Dotted rings with their depth; boss depths in red.
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            for (int d = 1; d <= maxDepth; d++)
+            {
+                float rad = ring * d;
+                bool bossRing = d % Hub.BossEvery == 0;
+                var c = bossRing ? new Color(BossC.r, BossC.g, BossC.b, 0.35f) : new Color(InkC.r, InkC.g, InkC.b, 0.16f);
+                int dots = Mathf.Clamp(Mathf.RoundToInt(rad * 2f * Mathf.PI / 12f), 24, 360);
+                for (int i = 0; i < dots; i++)
+                {
+                    float ang = i * Mathf.PI * 2f / dots;
+                    var p = center + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * rad;
+                    if (local.Contains(p)) Style.Box(new Rect(p.x - 2f, p.y - 0.75f, 4f, 1.5f), c);
+                }
+                if (ring >= 30f || bossRing) Style.ShadowLabel(new Rect(center.x - 15f, center.y - rad - 9f, 30f, 18f), d.ToString(), new Color(c.r, c.g, c.b, 0.9f));
+            }
+            Text.Anchor = TextAnchor.UpperLeft;
+
+            foreach (var n in shown)
+                foreach (var to in n.next.Select(run.NodeById).Where(o => o != null && pos.ContainsKey(o.id)))
+                    DrawEdge(pos[n.id], pos[to.id], n, to, t, scale);
+
+            int hovered = -1;
+            foreach (var n in shown.Where(n => pos.ContainsKey(n.id)).OrderBy(n => n.depth))
+            {
+                float appear = Mathf.Clamp01((t - 0.12f - Mathf.Min(n.depth, 8) * 0.05f) / 0.4f);
+                if (appear <= 0f) continue;
+                var c = pos[n.id];
+                float size = (n.IsBoss || n == hub ? BossSize : NodeSize) * scale;
+                var hit = new Rect(c.x - size / 2f - 6f, c.y - size / 2f - 6f, size + 12f, size + 12f);
+                if (!hit.Overlaps(local)) continue;
+                if (Mouse.IsOver(hit)) hovered = n.id;
+                if (!sidesShown && Mouse.IsOver(hit)) NodeInfo.ForNode(n).Show();
+                float grow = n.id == hoveredId ? Style.EaseOutCubic(hoverAmount) : 0f;
+                if (n.state == RunNodeState.Available) c.y -= 2f * Mathf.Sin(Style.Now * 2.4f + n.id);
+                float s = size * Style.EaseOutBack(appear) * (1f + 0.14f * grow);
+                DrawNode(new Rect(c.x - s / 2f, c.y - s / 2f, s, s), n, Style.EaseOutCubic(appear), grow, labels: scale > 0.7f || n.id == hoveredId);
+            }
+            GUI.EndGroup();
+            if (hovered != hoveredId)
+            {
+                hoveredId = hovered;
+                hoverAmount = 0f;
+                if (hovered >= 0) SoundDefOf.Mouseover_Standard.PlayOneShotOnCamera();
+            }
+            hoverAmount = Mathf.MoveTowards(hoverAmount, 1f, dt * 7f);
+        }
+
         private static float RowY(int row, Rect area) => area.yMax - area.height * (row + 0.5f) / WorldComponent_RoguelikeRun.RowCount;
 
         /// <summary>Rows rise from the bottom; each row is centred, with a small fixed jitter so the graph looks hand-drawn.</summary>
@@ -271,7 +394,7 @@ namespace Roguelike
             return new Vector2(x, y);
         }
 
-        private static void DrawEdge(Vector2 a, Vector2 b, RunNode from, RunNode to, float t)
+        private static void DrawEdge(Vector2 a, Vector2 b, RunNode from, RunNode to, float t, float scale = 1f)
         {
             bool fromTaken = from.state == RunNodeState.Current || from.state == RunNodeState.Completed;
             bool open = fromTaken && to.state == RunNodeState.Available;
@@ -283,8 +406,8 @@ namespace Roguelike
             float reveal = Style.EaseOutCubic((t - 0.2f) / 0.55f);
             // Stop short of the nodes, so lines meet their rims rather than their centres.
             var dir = (b - a).normalized;
-            a += dir * (from.IsBoss ? BossSize : NodeSize) * 0.6f;
-            b -= dir * (to.IsBoss ? BossSize : NodeSize) * 0.6f;
+            a += dir * (from.IsBoss || from.preset.kind == NodeKind.Hub ? BossSize : NodeSize) * 0.6f * scale;
+            b -= dir * (to.IsBoss ? BossSize : NodeSize) * 0.6f * scale;
             b = Vector2.Lerp(a, b, reveal);
             if (taken)
             {
@@ -304,7 +427,7 @@ namespace Roguelike
             }
         }
 
-        private static void DrawNode(Rect r, RunNode n, float appear, float hover)
+        private static void DrawNode(Rect r, RunNode n, float appear, float hover, bool labels = true)
         {
             var kind = KindColor(n);
             bool available = n.state == RunNodeState.Available, current = n.state == RunNodeState.Current;
@@ -324,7 +447,7 @@ namespace Roguelike
             var icon = NodeIcons.For(n);
             var iconTint = done ? new Color(0.62f, 0.62f, 0.62f) : skipped ? new Color(0.4f, 0.4f, 0.4f) : Color.Lerp(Color.white, kind, 0.25f);
             if (icon != null) Style.Tex(r.ContractedBy(r.width * 0.2f), icon, new Color(iconTint.r, iconTint.g, iconTint.b, appear * fade));
-            if (done)
+            if (done && n.preset.kind != NodeKind.Hub)
                 Style.Tex(new Rect(r.xMax - r.width * 0.36f, r.yMax - r.width * 0.36f, r.width * 0.38f, r.width * 0.38f), Widgets.CheckboxOnTex, new Color(1f, 1f, 1f, appear));
 
             Text.Font = GameFont.Tiny;
@@ -336,9 +459,16 @@ namespace Roguelike
                 Text.Anchor = TextAnchor.MiddleCenter;
                 Style.ShadowLabel(tag, "YOU", new Color(0.85f, 1f, 0.85f, appear));
             }
+            if (!labels)
+            {
+                Text.Font = GameFont.Small;
+                return;
+            }
             // Under the node: its kind, and the biome for map nodes (or where the boss leads).
             Text.Anchor = TextAnchor.UpperCenter;
-            string line2 = n.IsBoss ? (n.act < WorldComponent_RoguelikeRun.ActsPerRun ? $"then act {n.act + 1}" : "final boss")
+            bool hub = WorldComponent_RoguelikeRun.Get?.hubMode == true;
+            string line2 = n.IsBoss && hub ? (n.depth >= Hub.FinalDepth && n.depth < Hub.FinalDepth + Hub.BossEvery ? "final boss" : $"depth {n.depth}")
+                : n.IsBoss ? (n.act < WorldComponent_RoguelikeRun.ActsPerRun ? $"then act {n.act + 1}" : "final boss")
                 : n.preset.HasMap && n.tile.Valid ? Find.WorldGrid[n.tile].PrimaryBiome.LabelCap.ToString() : null;
             float a = (skipped ? 0.3f : done ? 0.55f : 0.9f) * appear;
             Style.ShadowLabel(new Rect(r.center.x - 80f, r.yMax + 2f, 160f, 16f), KindLabel(n), new Color(kind.r, kind.g, kind.b, a));
@@ -368,10 +498,12 @@ namespace Roguelike
         {
             float a = Style.EaseOutCubic((t - 0.2f) / 0.4f);
             if (a <= 0f) return;
-            var legend = new Rect(r.x, r.y, r.width, 40f + (LegendKinds.Length + 1) * 26f);
+            var kinds = LegendKinds.Cast<NodeKind?>().Append(null).ToList();
+            if (run.hubMode) kinds.Insert(0, NodeKind.Hub);
+            var legend = new Rect(r.x, r.y, r.width, 40f + kinds.Count * 26f);
             Panel(legend, "Legend", a);
             float y = legend.y + 34f;
-            foreach (var k in LegendKinds.Cast<NodeKind?>().Append(null))
+            foreach (var k in kinds)
             {
                 var c = k == null ? BossC : KindColor(k.Value);
                 var dot = new Rect(legend.x + 14f, y + 2f, 20f, 20f);
@@ -381,15 +513,17 @@ namespace Roguelike
                 if (icon != null) Style.Tex(dot.ContractedBy(4f), icon, new Color(1f, 1f, 1f, a));
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.MiddleLeft;
-                Style.ShadowLabel(new Rect(dot.xMax + 10f, y, legend.width - 60f, 24f), k == null ? "Boss" : KindLabel(k.Value), new Color(Style.Parchment.r, Style.Parchment.g, Style.Parchment.b, a));
+                Style.ShadowLabel(new Rect(dot.xMax + 10f, y, legend.width - 60f, 24f), k == null ? "Boss" : k == NodeKind.Hub ? "Your hub" : KindLabel(k.Value), new Color(Style.Parchment.r, Style.Parchment.g, Style.Parchment.b, a));
                 y += 26f;
             }
 
             // The run so far.
+            string asc = run.ascension > 0 ? $" · Ascension {run.ascension}" : "";
             var lines = new List<string>
             {
-                $"Act {run.act} of {WorldComponent_RoguelikeRun.ActsPerRun}" + (run.ascension > 0 ? $" · Ascension {run.ascension}" : ""),
-                $"Nodes cleared: {run.nodes.Count(n => n.state == RunNodeState.Completed)}",
+                run.hubMode ? $"Depth {run.deepestCleared} of {Hub.FinalDepth}{(run.endless ? " · endless" : "")}{asc}" : $"Act {run.act} of {WorldComponent_RoguelikeRun.ActsPerRun}{asc}",
+                run.hubMode ? $"Cleared: {run.nodes.Count(n => n.depth > 0 && n.state == RunNodeState.Completed)} · open: {Hub.Frontier(run).Count()}"
+                    : $"Nodes cleared: {run.nodes.Count(n => n.state == RunNodeState.Completed)}",
                 $"Relics: {run.relics.Count} · Blueprints: {run.blueprints.Count}",
                 $"Points earned: {run.pointsEarned}",
             };
@@ -415,8 +549,9 @@ namespace Roguelike
             var node = run.NodeById(hoveredId);
             if (node == null)
             {
-                node = run.CurrentNode ?? run.nodes.FirstOrDefault(n => n.state == RunNodeState.Available);
-                if (node == null || node.act != shownAct) node = run.nodes.FirstOrDefault(n => n.act == shownAct && n.IsBoss);
+                node = run.CurrentNode ?? run.nodes.FirstOrDefault(n => n.state == RunNodeState.Available && (!run.hubMode || n.depth > 0));
+                if (run.hubMode) node ??= run.HubNode;
+                else if (node == null || node.act != shownAct) node = run.nodes.FirstOrDefault(n => n.act == shownAct && n.IsBoss);
             }
             if (node == null) return;
             float w = Mathf.Min(r.width, Dialog_RewardPick.CardWidth), h = Mathf.Min(r.height - 30f, Dialog_RewardPick.CardHeight);
@@ -428,7 +563,11 @@ namespace Roguelike
             GUI.color = old;
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.UpperCenter;
-            string state = node.state switch
+            string state = run.hubMode && node.id == run.hubNodeId ? "Your hub."
+                : run.hubMode && node.state == RunNodeState.Available ? "Open: send a team from the hub."
+                : run.hubMode && node.state == RunNodeState.Current ? "Your team is here."
+                : run.hubMode && node.state == RunNodeState.Completed && Hub.HarvestSites(run).Contains(node) ? "Cleared: open for harvest trips."
+                : node.state switch
             {
                 RunNodeState.Available => "You can choose this next.",
                 RunNodeState.Current => "You are here.",

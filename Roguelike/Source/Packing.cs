@@ -47,16 +47,23 @@ namespace Roguelike
         private readonly Texture2D destinationIcon;
         private readonly Action<Caravan> onDeparted;
         private readonly Action onCancelled;
+        /// <summary>Who leaves. With <see cref="chooseTeam"/> (hub mode) it's picked from <see cref="candidates"/>; otherwise everyone.</summary>
         private readonly List<Pawn> pawns;
+        private readonly List<Pawn> candidates;
+        private readonly bool chooseTeam;
+        private readonly string backLabel;
         private readonly List<Group> groups = new List<Group>();
-        private readonly float gearMass, capacity;
+        private float gearMass, capacity;
         private Category? filter;
-        private Vector2 scroll;
+        private Vector2 scroll, squadScroll;
         private float openedAt = -1f, shownMass, blockedAt = -10f;
         private bool departed;
 
-        public Dialog_Packing(Map map, string destination, Texture2D destinationIcon, Action<Caravan> onDeparted, Action onCancelled)
+        public Dialog_Packing(Map map, string destination, Texture2D destinationIcon, Action<Caravan> onDeparted, Action onCancelled,
+            bool chooseTeam = false, string backLabel = null)
         {
+            this.chooseTeam = chooseTeam;
+            this.backLabel = backLabel ?? "Back to the node choice";
             this.map = map;
             this.destination = destination;
             this.destinationIcon = destinationIcon;
@@ -69,11 +76,24 @@ namespace Roguelike
             closeOnCancel = true;
             closeOnAccept = false;
 
-            pawns = CaravanFormingUtility.AllSendablePawns(map, allowEvenIfDowned: true, allowEvenIfInMentalState: true, allowEvenIfPrisonerNotSecure: true)
-                .Where(p => p.Faction == Faction.OfPlayer || p.IsPrisonerOfColony).ToList();
+            candidates = CaravanFormingUtility.AllSendablePawns(map, allowEvenIfDowned: !chooseTeam, allowEvenIfInMentalState: !chooseTeam, allowEvenIfPrisonerNotSecure: true)
+                .Where(p => p.Faction == Faction.OfPlayer || !chooseTeam && p.IsPrisonerOfColony).ToList();
+            if (chooseTeam)
+            {
+                // By default every able colonist but one goes; someone stays to keep the hub running. Animals stay home.
+                var colonists = candidates.Where(p => p.IsColonist).ToList();
+                pawns = colonists.Take(Mathf.Max(1, colonists.Count - 1)).ToList();
+            }
+            else pawns = candidates.ToList();
+            Rebuild();
+        }
+
+        /// <summary>Recounts carry capacity and the things on offer for the current team. Picks so far are reset.</summary>
+        private void Rebuild()
+        {
             capacity = CollectionsMassCalculator.Capacity(pawns);
             gearMass = pawns.Sum(p => MassUtility.GearMass(p));
-
+            groups.Clear();
             foreach (var t in CaravanFormingUtility.AllReachableColonyItems(map, allowEvenIfOutsideHomeArea: true, allowEvenIfReserved: true, canMinify: true))
                 if (t is not Corpse && t.Spawned) Add(t, carried: false); // depart moves spawned items only
             foreach (var p in pawns)
@@ -81,6 +101,24 @@ namespace Roguelike
                     Add(t, carried: true);
             groups.SortBy(g => (int)g.category, g => -g.unitValue);
             shownMass = MassUsage;
+        }
+
+        public IReadOnlyList<Pawn> Candidates => candidates;
+
+        /// <summary>Hub mode: chooses who goes (from <see cref="Candidates"/>).</summary>
+        public void SetTeam(IEnumerable<Pawn> team)
+        {
+            if (!chooseTeam) return;
+            pawns.Clear();
+            pawns.AddRange(team.Where(candidates.Contains).Distinct());
+            Rebuild();
+        }
+
+        public void Toggle(Pawn p)
+        {
+            if (!chooseTeam || !candidates.Contains(p)) return;
+            if (!pawns.Remove(p)) pawns.Add(p);
+            Rebuild();
         }
 
         private void Add(Thing t, bool carried)
@@ -184,7 +222,7 @@ namespace Roguelike
             }
             if (!pawns.Any(p => p.IsColonist && !p.Downed))
             {
-                Messages.Message("Someone has to be able to walk.", MessageTypeDefOf.RejectInput, historical: false);
+                Messages.Message(chooseTeam ? "Choose at least one colonist for the team." : "Someone has to be able to walk.", MessageTypeDefOf.RejectInput, historical: false);
                 return false;
             }
             foreach (var g in groups)
@@ -245,8 +283,8 @@ namespace Roguelike
             DrawTiles(new Rect(right.x, right.y + 46f, right.width, right.height - 46f), t);
 
             var bar = new Rect(body.x, body.yMax - 46f, body.width, 44f);
-            if (Style.Button(new Rect(bar.x, bar.y, 220f, 42f), "Back to the node choice", Style.Parchment)) Close();
-            if (Style.Button(new Rect(bar.xMax - 220f, bar.y, 220f, 42f), "Depart", Style.Gold, MassUsage <= capacity + 0.01f)) Depart();
+            if (Style.Button(new Rect(bar.x, bar.y, 220f, 42f), backLabel, Style.Parchment)) Close();
+            if (Style.Button(new Rect(bar.xMax - 220f, bar.y, 220f, 42f), "Depart", Style.Gold, MassUsage <= capacity + 0.01f && pawns.Any(p => p.IsColonist && !p.Downed))) Depart();
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
         }
@@ -264,7 +302,8 @@ namespace Roguelike
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.UpperRight;
             Style.ShadowLabel(new Rect(r.xMax - 520f, r.y + 10f, 520f, 54f),
-                "Click a tile to add, right-click to remove. Shift-click for all or none, ctrl-click for an exact amount.\nThe whole squad leaves; what isn't packed stays behind.", new Color(1f, 1f, 1f, 0.6f * a));
+                "Click a tile to add, right-click to remove. Shift-click for all or none, ctrl-click for an exact amount.\n" +
+                (chooseTeam ? "Click a portrait to choose who goes. Whoever stays keeps the hub running." : "The whole squad leaves; what isn't packed stays behind."), new Color(1f, 1f, 1f, 0.6f * a));
             Text.Anchor = TextAnchor.UpperLeft;
             Text.Font = GameFont.Small;
         }
@@ -296,20 +335,40 @@ namespace Roguelike
             Style.Tex(r, Style.CardBody, new Color(1f, 1f, 1f, 0.9f));
             Style.Border(r, new Color(Accent.r, Accent.g, Accent.b, 0.4f), 1f);
             Text.Font = GameFont.Tiny;
-            Style.ShadowLabel(new Rect(r.x + 10f, r.y + 8f, r.width, 18f), $"SQUAD · {pawns.Count}", new Color(Accent.r, Accent.g, Accent.b, 0.95f));
-            float y = r.y + 30f;
-            foreach (var p in pawns)
+            Style.ShadowLabel(new Rect(r.x + 10f, r.y + 8f, r.width, 18f), chooseTeam ? $"TEAM · {pawns.Count} of {candidates.Count}" : $"SQUAD · {pawns.Count}", new Color(Accent.r, Accent.g, Accent.b, 0.95f));
+            // The list scrolls when the squad (or the hub's colonists and animals) don't fit.
+            var shown = chooseTeam ? candidates : pawns;
+            var outer = new Rect(r.x, r.y + 30f, r.width, r.height - 34f);
+            var view = new Rect(0f, 0f, outer.width - 16f, shown.Count * 54f);
+            Widgets.BeginScrollView(outer, ref squadScroll, view);
+            float y = 0f;
+            foreach (var p in shown)
             {
-                if (y + 52f > r.yMax) break;
-                var row = new Rect(r.x + 8f, y, r.width - 16f, 48f);
+                var row = new Rect(8f, y, view.width - 12f, 48f);
+                bool going = pawns.Contains(p);
+                if (chooseTeam)
+                {
+                    Style.Box(row, new Color(Accent.r, Accent.g, Accent.b, going ? 0.22f : Mouse.IsOver(row) ? 0.08f : 0f));
+                    if (going) Style.Border(row, new Color(Accent.r, Accent.g, Accent.b, 0.8f), 1f);
+                    if (Widgets.ButtonInvisible(row))
+                    {
+                        Toggle(p);
+                        SoundDefOf.Tick_High.PlayOneShotOnCamera();
+                    }
+                }
+                var oldC = GUI.color;
+                if (!going) GUI.color = new Color(1f, 1f, 1f, 0.45f);
                 GUI.DrawTexture(new Rect(row.x, row.y, 48f, 48f), PortraitsCache.Get(p, new Vector2(48f, 48f), Rot4.South, new Vector3(0f, 0f, 0.1f), 1.4f));
                 Text.Font = GameFont.Small;
                 Style.ShadowLabel(new Rect(row.x + 54f, row.y + 4f, row.width - 54f, 22f), p.LabelShortCap, Style.Parchment);
                 Text.Font = GameFont.Tiny;
                 string state = p.Downed ? "downed, carried" : p.RaceProps.Animal ? "pack animal" : p.IsPrisonerOfColony ? "prisoner" : "colonist";
+                if (chooseTeam && !going) state = "stays home";
                 Style.ShadowLabel(new Rect(row.x + 54f, row.y + 26f, row.width - 54f, 18f), $"{MassUtility.Capacity(p):0} kg · {state}", new Color(1f, 1f, 1f, 0.6f));
+                GUI.color = oldC;
                 y += 54f;
             }
+            Widgets.EndScrollView();
             Text.Font = GameFont.Small;
         }
 

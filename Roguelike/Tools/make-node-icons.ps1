@@ -17,6 +17,7 @@ $glyphs = [ordered]@{
     Merchant      = '$'
     Treasure      = [char]0x2726  # star
     Boss          = [char]0x265B  # crown
+    Hub           = [char]0x2302  # house
 }
 
 $size = 128
