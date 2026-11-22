@@ -149,6 +149,14 @@ namespace Roguelike
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
             TooltipHandler.TipRegion(r, () => new Alert_RoguelikeNode().GetExplanation(), 0x52_4C_4E_44);
+
+            // The act map, a click away while building.
+            if (node != null)
+            {
+                Text.Font = GameFont.Tiny;
+                if (Style.Button(new Rect(r.xMax - 96f, r.yMax + 6f, 96f, 24f), "Act map", Style.Gold)) Dialog_RunMap.Toggle();
+                Text.Font = GameFont.Small;
+            }
         }
 
         private static Rect BarText(Rect bar)

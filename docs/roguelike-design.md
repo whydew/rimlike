@@ -18,8 +18,8 @@ A RimWorld mod that turns the game into a run-based squad roguelike. Structure f
 
 ## Run structure
 
-1. **Start:** pick a starter loadout (see [Starter loadouts](#starter-loadouts)). You get its pawns, its fixed signature relic and a small kit. On the landing screen, the first row of nodes shows on the world map; you land on the one you pick, so the first landing is the first node.
-2. **Act map:** a branching node graph ending in a boss, laid out on the RimWorld world map. Each node is a world tile, so its biome comes from the planet. Each node previews its type, objective, threat modifier and reward. Connections between nodes are drawn on the world map. The caravan goes straight into a connected next node when the player picks it (no overland travel). Runs reuse the same world and seed; each run places a fresh node graph on it.
+1. **Start:** pick a starter loadout (see [Starter loadouts](#starter-loadouts)). You get its pawns, its fixed signature relic and a small kit. On the landing screen, the first row of nodes shows as cards; you land on the one you pick, so the first landing is the first node.
+2. **Act map:** a branching node graph ending in a boss, shown on a flat full-screen map (like Slay the Spire or Against the Storm), not the RimWorld world map. Each node is still a world tile behind the scenes, picked at random for a random biome, terrain and season per node; the planet is never shown. Each node previews its type, terrain, objective, threat modifier and reward. The caravan goes straight into a connected next node when the player picks it (no overland travel). Runs reuse the same world and seed; each run places a fresh node graph on it.
 3. **Play the node** (below).
 4. **Win the node:** a letter announces the objective is complete. Acknowledging it ends the node instantly.
 5. **Rewards:** pick 1 of 3 cards (blueprint, relic, gear, implant, or occasionally a recruit).
@@ -203,3 +203,18 @@ The core-loop prototype lives in [`Roguelike/`](../Roguelike/README.md).
 - Setup screens in the same style (`Setup.cs`): the vanilla scenario, ideoligion and starting-pawn pages are swapped for card screens as they open, keeping their place in the setup chain. Starters show their badge, squad size, relic and description; ideoligion is a pick of three generated ones (different structure memes); the squad is picked from ten candidates generated from the starter's own pawn requests, up to its squad size.
 - Packing (`Packing.cs`) replaces vanilla's caravan screen between nodes: the whole squad leaves, things are tiles by category with presets, and the carry meter refuses anything past the limit.
 - Landing is a card pick too: the vanilla landing-site page is replaced during a run by the starting row as path cards over the planet. Siblings in a row never repeat an objective when there's an alternative.
+
+## Overhaul direction (2026-11-22)
+
+Brainstorm outcome. Base building is a core RimWorld experience and stays; the overhaul makes node length the player's choice and makes the squad the deck, rather than cutting building systems.
+
+- **In:** flat act map; per-node random biome and season; short base objectives with optional stretch goals (push your luck: extra rewards while the clock keeps rising); pawn level-ups between nodes (draft a trait, passion, skill jump or curse removal); scars and wear as persistent HP cleared at rest sites; telegraphed raids in the HUD (time, direction, size).
+- **Not for now:** pre-built camp kits or ruins-first starts, replacing food with a supplies counter, dropping packing or research, shorter acts.
+
+| Step | Scope | Status |
+|---|---|---|
+| **1. Flat act map** | Full-screen act map replaces the world map: World button, HUD **Act map** button, **View act map** on the next-node cards; covers the planet whenever it would show (map-less nodes resolve over it). Each node gets a random tile for a random biome, terrain and season; node cards and the map show it. Unoffered expeditions show only "Expedition" until their objective is set | ✅ Done (2026-11-22, in-game self-test) |
+| **2. Stretch goals** | Expedition presets become a short base objective plus 2–3 optional stretch goals | |
+| **3. Pawn level-ups** | The stretch-goal payout: per-pawn trait/passion/skill drafts | |
+| **4. Telegraphed raids** | Next raid's time, direction and size in the HUD | |
+| **5. Scars and wear** | Run-level wear cleared only at rest sites, tuned to the new node length | |

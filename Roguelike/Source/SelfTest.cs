@@ -226,8 +226,10 @@ namespace Roguelike
                 var sizes = Enumerable.Range(0, 6).Select(r => run.Row(a, r).Count()).ToList();
                 SelfTest.Check(sizes.SequenceEqual(new[] { 3, 3, 3, 3, 2, 1 }), $"act {a}: row sizes 3,3,3,3,2,1 (got {string.Join(",", sizes)})");
                 var boss = run.Row(a, 5).First();
-                float span = Find.WorldGrid.ApproxDistanceInTiles(run.Row(a, 0).ElementAt(1).tile, boss.tile);
-                SelfTest.Check(span >= 25f, $"act {a}: nodes are spread out ({span:0} tiles from the start row to the boss)");
+                int biomes = run.nodes.Where(n => n.act == a && n.preset.HasMap).Select(n => Find.WorldGrid[n.tile].PrimaryBiome).Distinct().Count();
+                SelfTest.Check(biomes >= 3, $"act {a}: map nodes span several biomes ({biomes})");
+                bool rowsVaried = Enumerable.Range(0, 5).All(r => run.Row(a, r).Count() < 2 || run.Row(a, r).Select(n => Find.WorldGrid[n.tile].PrimaryBiome).Distinct().Count() > 1);
+                SelfTest.Check(rowsVaried, $"act {a}: nodes side by side don't all share a biome");
                 if (a < acts)
                     SelfTest.Check(boss.next.OrderBy(i => i).SequenceEqual(run.Row(a + 1, 0).Select(n => n.id).OrderBy(i => i)), $"act {a}: the boss leads to the starting nodes of act {a + 1}");
                 bool crossing = false;
@@ -1218,10 +1220,22 @@ namespace Roguelike
             var kinds = Enum.GetNames(typeof(NodeKind)).Append("Boss").ToList();
             SelfTest.Check(kinds.All(NodeIcons.Has), $"node icons loaded for all {kinds.Count} kinds");
             var markers = Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().ToList();
-            SelfTest.Check(markers.All(m => m.ExpandingIcon == NodeIcons.For(m.Node)), "every marker uses its kind's icon");
-            CameraJumper.TryJump(markers.First(m => m.Node.state == RunNodeState.Current));
-            Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(run.Row(2).First().tile));
+            SelfTest.Check(markers.All(m => m.Node != null), "every marker belongs to a node");
+            SelfTest.Check(run.nodes.Where(n => n.preset.HasMap).All(n => !n.TerrainLine.NullOrEmpty()), "every map node shows its biome and season");
+            // The world never shows during a run: the act map covers it, and the World button opens the act map.
             foreach (var w in Screenshot("s5_icons", world: true)) yield return w;
+            var cover = Find.WindowStack.WindowOfType<Dialog_RunMap>();
+            SelfTest.Check(cover != null && cover.layer == WindowLayer.GameUI, "showing the world opens the act map over it");
+            CameraJumper.TryHideWorld();
+            yield return Frames(5);
+            SelfTest.Check(Find.WindowStack.WindowOfType<Dialog_RunMap>() == null, "the act map closes when the world is hidden");
+            new MainButtonWorker_ToggleWorld().Activate();
+            yield return Frames(5);
+            SelfTest.Check(Find.WindowStack.WindowOfType<Dialog_RunMap>() is { layer: WindowLayer.Dialog } && !WorldRendererUtility.WorldSelected, "the World button opens the act map, not the planet");
+            foreach (var w in Screenshot("s6_act_map", world: false)) yield return w;
+            Dialog_RunMap.Toggle();
+            yield return Frames(5);
+            SelfTest.Check(Find.WindowStack.WindowOfType<Dialog_RunMap>() == null, "the act map closes again");
 
             // HUD after the grace period.
             var map = Find.CurrentMap;

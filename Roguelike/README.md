@@ -2,7 +2,7 @@
 
 ![Rimlike banner](About/Preview.png)
 
-A run-based squad roguelike for RimWorld 1.7, built from [the design doc](../docs/roguelike-design.md). Pick a starter, land on a node of a branching act laid out on the world map, clear nodes under worsening weather, draft rewards, and beat the boss. Meta points earned across runs buy unlocks.
+A run-based squad roguelike for RimWorld 1.7, built from [the design doc](../docs/roguelike-design.md). Pick a starter, land on a node of a branching act shown on a flat act map, clear nodes under worsening weather, draft rewards, and beat the boss. Meta points earned across runs buy unlocks.
 
 ## Build
 
@@ -17,14 +17,14 @@ This targets RimWorld 1.7 (`net10.0`, `Krafs.Rimworld.Ref 1.7.5005-unstable`, Ha
 
 1. Enable **Harmony**, then **Rimlike: Roguelike Runs** below it.
 2. **New colony** opens the starter cards: **Crashlanded**, plus any starters you've unlocked (Tribal Hunters, Ice Nomads, and with the DLCs one starter per Biotech xenotype, Mech-tender, Psycaster Exile, Imperial Noble and Void Cultists). With the mod enabled only roguelike starts are offered; disable the mod to play standard RimWorld. → storyteller → world → landing node. With Ideology, pick one of three generated ideoligion cards. Then pick your squad from ten candidate cards that fit the starter, up to the starter's squad size.
-3. The whole run is laid out on the world map: three acts of 15 nodes, spread across the planet and joined by lines, each node with an icon for its kind. NPC settlements are cleared away; the only bases left are the elite and boss nodes. The landing screen shows act 1's starting nodes as cards (objective, weather, reward); pick one and **Land here**.
+3. The whole run is laid out up front on the **act map**: three acts of 15 nodes in rows rising to a boss, each node with an icon for its kind and, for map nodes, its biome. Every node has a random biome, terrain and season (it sits on a random tile of a planet you never see). The **World** button, the **Act map** button under the node panel and **View act map** on the next-node cards all open it; hover a node for its briefing. The landing screen shows act 1's starting nodes as cards (terrain, objective, weather, reward); pick one and **Land here**.
 4. Each node has an objective; the panel at the top right shows progress and the weather. Node kinds:
    - **Expedition:** classic base building over roughly 25–45 in-game days: grow a granary of corn, a rice or crop rotation, a medicine garden, a stone fortress, private quarters, or a whole season with no deaths. Each has requirements that scale with your squad and a minimum stay, under a weather modifier rolled to fit the climate.
    - **Ambush:** a raid attacks at once; defeat every enemy.
    - **Raider camp:** a hidden camp across the map. Patrol raids, timed reinforcements and the weather push you to attack.
    - **Escort:** keep a refugee alive for a few days. If they die, the run ends.
    - **Elite:** storm a hostile faction base; the reward is a choice of relics. Bosses are bigger bases with reinforcements.
-   - **Event, rest site, treasure, merchant:** resolved on the world map, no map. Rest sites heal, train or treat; treasure gives relics; merchants sell cards for the silver your caravan carries.
+   - **Event, rest site, treasure, merchant:** resolved on the spot over the act map, no map. Rest sites heal, train or treat; treasure gives relics; merchants sell cards for the silver your caravan carries.
 5. The modifier (cold, heat, toxic buildup, a psychic drone, meteors, tornadoes, a hurricane or a tidal surge on the coast) holds off for a grace period, then worsens every day with no cap: slower while you're ahead of pace, faster while behind.
 6. Clearing a node opens the reward screen: pick 1 card (relic, gear, implant, blueprint, research or recruit) or skip. Research cards finish a project right away, favouring ones that open gated objectives. Relics come in common, uncommon and rare. Recruit nodes offer only recruits. Un-drafted blueprint groups are hidden from the build menu.
 7. Then pick your next node from the cards (one per connected node), and pack on the packing screen: item tiles by category (click to add, right-click to remove, shift for all or none), **Essentials** and **Most valuable** presets, and a carry meter that won't let you pack past what the squad and pack animals can carry. **Back to the node choice** returns to the cards. The squad goes straight into the chosen node, no travel. Choosing a node skips its siblings. Closed the cards by accident? Use **Leave node now** on the completion letter.
@@ -45,7 +45,7 @@ All content is XML in `Defs/`, no recompile needed:
 
 Art is generated, no assets are copied from anywhere: `Tools/make-node-icons.ps1` (world-map node icons), `Tools/make-unlock-icons.ps1` (unlock and starter badges) and `Tools/make-mod-art.ps1` (`About/ModIcon.png` and `About/Preview.png`). UI textures are made in code (`Source/Style.cs`).
 
-Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
+Act shape (row sizes) is in `Source/RunMap.cs`; the act map screen is `Source/RunMapScreen.cs`.
 
 ## Self-test
 
@@ -53,7 +53,7 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 
 | Mode | Covers |
 |---|---|
-| `win` | Act graph, travel, rewards after each node, map-less nodes on the path, all three acts and their bosses, winning |
+| `win` | Act graph (incl. varied biomes), travel, rewards after each node, map-less nodes on the path, all three acts and their bosses, winning |
 | `leave` | Leaving a node early ends the run |
 | `wipe` | Losing the squad ends the run |
 | `rewards` | Card screen (incl. a mid-pick screenshot), every reward kind incl. research, relic effects, blueprint build-menu gate |
@@ -63,7 +63,7 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 | `starter` | With `-Scenario <ScenarioDef>` (any roguelike starter, including the DLC ones): pawns, xenotypes, kit and signature relic |
 | `newrun` | Wipe, vanilla game-over suppressed, New colony and New run open the starter cards, then the ideoligion and squad cards, into a fresh run with exactly the chosen squad and ideoligion |
 | `disasters` | Meteor aftermath, tornado, hurricane, tidal surge |
-| `polish` | Node icons, HUD panel, relic rarity |
+| `polish` | Node icons, act map (covers the world, World button), HUD panel, relic rarity |
 
 ## Known gaps
 

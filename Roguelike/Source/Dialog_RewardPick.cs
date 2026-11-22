@@ -205,6 +205,14 @@ namespace Roguelike
                 if (Widgets.ButtonText(skipRect, "Skip reward")) Skip();
                 GUI.color = Color.white;
             }
+            // Choosing the next node: the whole act can be looked over first.
+            else if (!leaving && cards.Count > 0 && cards[0].kind == RewardKind.Path)
+            {
+                var mapRect = new Rect(inRect.center.x - 90f, y0 + CardHeight + 44f, 180f, 38f);
+                GUI.color = new Color(1f, 1f, 1f, Style.EaseOutCubic((t - 0.6f) / 0.4f));
+                if (Widgets.ButtonText(mapRect, "View act map")) Dialog_RunMap.Toggle();
+                GUI.color = Color.white;
+            }
 
             if (leaving && !resolved && exit >= 1f)
             {
@@ -332,7 +340,17 @@ namespace Roguelike
             float dh = Mathf.Min(Text.CalcHeight(desc, body.width), 30f);
             GUI.color = dim;
             Widgets.Label(new Rect(body.x, y, body.width, dh), desc);
-            y += dh + 6f;
+            y += dh + 4f;
+            // Where it is: biome, terrain, season and temperature.
+            string terrain = node.TerrainLine;
+            if (terrain != null)
+            {
+                float th = Mathf.Min(Text.CalcHeight(terrain, body.width), 28f);
+                GUI.color = new Color(0.62f, 0.82f, 0.62f, a);
+                Widgets.Label(new Rect(body.x, y, body.width, th), terrain);
+                y += th + 4f;
+            }
+            y += 2f;
 
             // Leave room for the weather and danger lines below the objective.
             string weather = p.WeatherLine(node.Weather), danger = p.DangerLine;
@@ -439,7 +457,7 @@ namespace Roguelike
                     return "Completes this research right away." + (unlocks.Count > 0 ? "\nUnlocks: " + string.Join(", ", unlocks) + "." : "")
                            + "\n\n" + card.research.description.Split('\n')[0];
                 case RewardKind.Path:
-                    return card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
+                    return (card.pathNode.TerrainLine is { } terrain ? terrain + "\n" : "") + card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }
             return "";
         }
