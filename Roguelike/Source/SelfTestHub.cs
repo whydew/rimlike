@@ -201,6 +201,7 @@ namespace Roguelike
             // Expeditions have stretch goals: the team stays until it chooses to go home.
             yield return Frames(30);
             SelfTest.Check(NodeComp(thirdMap).StretchOpen && PackingWindow == null && run.pendingReturnNodeId < 0, "with stretch goals left the team stays instead of heading home");
+            SelfTest.Check(Hub.CantSendReason(run) != null && !Hub.HarvestSites(run).Contains(third), "while it stays, no other frontier team can leave and the node isn't a harvest site yet");
             foreach (var w in GoHome(thirdMap, goer, open: true)) yield return w;
 
             // ---------- 4. A map-less node: the team comes straight home ----------

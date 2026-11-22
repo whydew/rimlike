@@ -237,11 +237,15 @@ namespace Roguelike
 
         /// <summary>Cleared frontier nodes with a map you can go back to for resources (not enemy bases).</summary>
         public static IEnumerable<RunNode> HarvestSites(WorldComponent_RoguelikeRun run) =>
-            run.nodes.Where(n => n.depth > 0 && n.state == RunNodeState.Completed && n.preset.HasMap && !n.preset.assault);
+            run.nodes.Where(n => n.depth > 0 && n.state == RunNodeState.Completed && n.preset.HasMap && !n.preset.assault && !InPlay(n));
 
-        /// <summary>The frontier node a team is out at: the current node, or a failed one the team hasn't left yet.</summary>
+        /// <summary>The node's own map is still loaded with its objective running (a team there, or staying for stretch goals).</summary>
+        private static bool InPlay(RunNode n) =>
+            Current.Game.FindMap(n.tile) is { } m && m.GetComponent<MapComponent_RoguelikeNode>() is { Active: true };
+
+        /// <summary>The frontier node a team is out at: the current node, or one whose objective is still running there (failed, or staying for stretch goals).</summary>
         public static RunNode TeamAway(WorldComponent_RoguelikeRun run) =>
-            run.CurrentNode ?? Frontier(run).FirstOrDefault(n => Current.Game.FindMap(n.tile) is { } m && m.mapPawns.AnyPawnBlockingMapRemoval);
+            run.CurrentNode ?? run.nodes.FirstOrDefault(n => n.depth > 0 && InPlay(n) && Current.Game.FindMap(n.tile).mapPawns.AnyPawnBlockingMapRemoval);
 
         public static string CantSendReason(WorldComponent_RoguelikeRun run)
         {
@@ -316,6 +320,13 @@ namespace Roguelike
         /// <summary>A cleared node's map, fresh, with no objective, clock or reward: just its land and resources.</summary>
         public static void EnterHarvest(Caravan caravan, RunNode node)
         {
+            var run = WorldComponent_RoguelikeRun.Get;
+            if (run == null || !HarvestSites(run).Contains(node))
+            {
+                Messages.Message($"{node.preset.LabelCap} can't be harvested right now; the team heads home.", MessageTypeDefOf.RejectInput, false);
+                EnterHub(caravan);
+                return;
+            }
             LongEventHandler.QueueLongEvent(() =>
             {
                 var map = GetOrGenerateMapUtility.GetOrGenerateMap(node.tile, new IntVec3(node.preset.mapSize, 1, node.preset.mapSize), RoguelikeDefOf.Roguelike_Node);
