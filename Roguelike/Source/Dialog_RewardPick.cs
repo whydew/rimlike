@@ -300,7 +300,7 @@ namespace Roguelike
             if (card.kind == RewardKind.Path)
             {
                 DrawPathBody(body, card.pathNode, kind, a);
-                TooltipHandler.TipRegion(r, text); // the full briefing
+                if (hover > 0.5f && Mouse.IsOver(r)) NodeInfo.ForNode(card.pathNode).Show(); // the full briefing, in sections
             }
             else
             {
@@ -335,17 +335,17 @@ namespace Roguelike
             Style.ShadowLabel(new Rect(reward.x + 6f, reward.y + 15f, reward.width - 8f, 18f), node.RewardShort, new Color(1f, 0.95f, 0.82f, a));
 
             float y = body.y, bottom = reward.y - 4f;
-            // Description: at most two lines.
-            string desc = p.description;
+            // Description: two lines at most, one when the terrain line needs the room (the hover panel has it all).
+            string terrain = node.TerrainLine;
+            string desc = terrain != null ? p.description.Truncate(body.width) : p.description;
             float dh = Mathf.Min(Text.CalcHeight(desc, body.width), 30f);
             GUI.color = dim;
             Widgets.Label(new Rect(body.x, y, body.width, dh), desc);
             y += dh + 4f;
             // Where it is: biome, terrain, season and temperature.
-            string terrain = node.TerrainLine;
             if (terrain != null)
             {
-                float th = Mathf.Min(Text.CalcHeight(terrain, body.width), 28f);
+                float th = Text.CalcHeight(terrain, body.width);
                 GUI.color = new Color(0.62f, 0.82f, 0.62f, a);
                 Widgets.Label(new Rect(body.x, y, body.width, th), terrain);
                 y += th + 4f;

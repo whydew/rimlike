@@ -177,6 +177,27 @@ namespace Roguelike
             };
         }
 
+        /// <summary>Test-only: keeps info panels shown at fixed spots (they normally follow the mouse while something is hovered).</summary>
+        private class Window_PinnedPanels : Window
+        {
+            private readonly (InfoPanel panel, UnityEngine.Vector2 at)[] panels;
+
+            public Window_PinnedPanels((InfoPanel, UnityEngine.Vector2)[] panels)
+            {
+                this.panels = panels;
+                doWindowBackground = false;
+                drawShadow = false;
+                layer = WindowLayer.Super;
+            }
+
+            public override UnityEngine.Vector2 InitialSize => new UnityEngine.Vector2(1f, 1f);
+
+            public override void DoWindowContents(UnityEngine.Rect inRect)
+            {
+                for (int i = 0; i < panels.Length; i++) panels[i].panel.Show(panels[i].at, i);
+            }
+        }
+
         private static Dialog_RewardPick LevelUpWindow =>
             Find.WindowStack.Windows.OfType<Dialog_RewardPick>().FirstOrDefault(w => w.Cards.Count > 0 && w.Cards[0].kind == RewardKind.LevelUp);
 
@@ -644,7 +665,7 @@ namespace Roguelike
             foreach (var w in Screenshot("s8_stretch_hud", world: false)) yield return w;
             Give(map, "MealSimple", 20 * squadSize);
             yield return Until(() => comp.StretchMet >= 1); // a level-up pauses the game, so wait on the goal, not on ticks
-            SelfTest.Check(comp.StretchMet == 1 && comp.StretchOpen, $"granary: first stretch goal met, one left ({comp.StretchText(comp.NextStretch)})");
+            SelfTest.Check(comp.StretchMet == 1 && comp.StretchOpen, $"granary: first stretch goal met, one left ({comp.ProgressOf(comp.NextStretch)})");
             foreach (var w in TakeLevelUps(true)) yield return w;
             Give(map, "RawCorn", 1500);
             yield return Until(() => comp.StretchMet >= 2);
@@ -676,8 +697,8 @@ namespace Roguelike
             foreach (var w in TakeLevelUps(false)) yield return w;
             for (int tries = 0; stone < bigWall.Target(comp.squad) && tries < 5000; tries++) stone += SpawnStoneWall(map);
             yield return Ticks(300);
-            SelfTest.Check(comp.Have(bigWall) >= bigWall.Target(comp.squad) && !comp.StretchDone(wallIndex) && comp.stretchHeld[wallIndex] > 0f && comp.StretchText(bigWall).Contains("held"),
-                $"stone fortress: big wall built, the hold clock runs but isn't done ({comp.StretchText(bigWall)})");
+            SelfTest.Check(comp.Have(bigWall) >= bigWall.Target(comp.squad) && !comp.StretchDone(wallIndex) && comp.stretchHeld[wallIndex] > 0f && comp.ProgressOf(bigWall).Contains("held"),
+                $"stone fortress: big wall built, the hold clock runs but isn't done ({comp.ProgressOf(bigWall)})");
             float heldBefore = comp.stretchHeld[wallIndex];
             var someWalls = looseWalls.Where(x => x.Spawned).Take(comp.Have(bigWall) - bigWall.Target(comp.squad) + 5).ToList();
             foreach (var wall in someWalls) wall.Destroy();
@@ -1340,6 +1361,19 @@ namespace Roguelike
             comp.AdvanceThreat(1.5f);
             CameraJumper.TryJump(new GlobalTargetInfo(map.mapPawns.FreeColonistsSpawned.First().Position, map));
             foreach (var w in Screenshot("s5_hud", world: false)) yield return w;
+
+            // Hover panels: a node card's briefing in sections over the node cards, and the HUD's progress panel (pinned in place, as the test can't hover).
+            var expedition = run.nodes.First(n => n.preset.HasMap && n.preset.stretchGoals.Count > 0 && n.preset.patrolIntervalDays > 0f);
+            var nodePanel = NodeInfo.ForNode(expedition);
+            var hudPanel = NodeInfo.ForMap(comp);
+            var pathCards = run.Row(1, 1).Select(n => new RewardCard { kind = RewardKind.Path, pathNode = n }).ToList();
+            Find.WindowStack.Add(new Dialog_RewardPick(pathCards, "Self-test: info panels", null, allowSkip: false, title: "Where next?"));
+            var pinned = new Window_PinnedPanels(new[] { (nodePanel, new UnityEngine.Vector2(40f, 40f)), (hudPanel, new UnityEngine.Vector2(UI.screenWidth - 380f, 140f)) });
+            Find.WindowStack.Add(pinned);
+            foreach (var w in Screenshot("s9_info_panels", world: false)) yield return w;
+            SelfTest.Check(Find.WindowStack.Windows.OfType<ImmediateWindow>().Count() >= 2, "info panels: the node card and HUD panels draw as styled overlays");
+            pinned.Close(false);
+            Find.WindowStack.WindowOfType<Dialog_RewardPick>()?.Close(false);
 
             // Rarity.
             var rare = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_WorkGloves");

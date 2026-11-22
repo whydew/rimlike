@@ -390,7 +390,8 @@ namespace Roguelike
         /// <summary>The first stretch goal not met yet, for the HUD.</summary>
         public NodeRequirement NextStretch => preset.stretchGoals.Where((r, i) => !StretchDone(i)).FirstOrDefault();
 
-        public string StretchText(NodeRequirement r) => r.Short(squad, Have(r), Held(r));
+        /// <summary>A requirement's (or stretch goal's) progress in a few words, e.g. "40/60 stony wall".</summary>
+        public string ProgressOf(NodeRequirement r) => r.Short(squad, Have(r), Held(r));
 
         /// <summary>0..1 across all stretch goals: met ones count fully, the rest by progress.</summary>
         public float StretchProgress => preset.stretchGoals.Count == 0 ? 1f
@@ -957,7 +958,7 @@ namespace Roguelike
             {
                 sb.AppendLine($"Stretch goals ({c.StretchMet}/{c.preset.stretchGoals.Count}; each levels up a pawn):");
                 for (int i = 0; i < c.preset.stretchGoals.Count; i++)
-                    sb.AppendLine($"  • {c.preset.stretchGoals[i].Card(c.squad)}: {(c.StretchDone(i) ? "met" : c.StretchText(c.preset.stretchGoals[i]))}");
+                    sb.AppendLine($"  • {c.preset.stretchGoals[i].Card(c.squad)}: {(c.StretchDone(i) ? "met" : c.ProgressOf(c.preset.stretchGoals[i]))}");
             }
             if (c.RaidText is { } raid) sb.AppendLine(raid + ". A red ring marks where it walks in once it's close.");
             var cond = c.Condition;

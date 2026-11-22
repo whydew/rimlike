@@ -238,7 +238,8 @@ namespace Roguelike
                 if (Mouse.IsOver(hit)) hovered = n.id;
                 // Too narrow for the side card: the briefing comes as a tooltip instead.
                 if (!sidesShown && Mouse.IsOver(hit))
-                    TooltipHandler.TipRegion(hit, () => Revealed(n) ? Dialog_RewardPick.BodyText(new RewardCard { kind = RewardKind.Path, pathNode = n }) : "Expedition: its objective is set when you can choose it.", n.id * 7 + 0x524D);
+                    (Revealed(n) ? NodeInfo.ForNode(n) : new InfoPanel("Expedition", "Base building", KindColor(n)).Add(n.TerrainLine, InfoPanel.Terrain)
+                        .Add("Its objective is set when you can choose it, to suit your squad.", InfoPanel.Dim)).Show();
                 float grow = n.id == hoveredId ? Style.EaseOutCubic(hoverAmount) : 0f;
                 if (n.state == RunNodeState.Available) c.y -= 2f * Mathf.Sin(Style.Now * 2.4f + n.id);
                 float s = size * Style.EaseOutBack(appear) * (1f + 0.14f * grow);

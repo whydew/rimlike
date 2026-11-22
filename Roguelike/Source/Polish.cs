@@ -111,7 +111,7 @@ namespace Roguelike
             Text.Font = GameFont.Tiny;
             var bar = new Rect(inner.x, inner.y + 24f, inner.width, 18f);
             Bar(bar, shownProgress, c.failed ? BadC : stretch ? StretchC : c.completed ? Style.Gold : GoodC, Style.Now - lastGain < 0.6f);
-            string objective = c.failed ? "Failed" : stretch ? $"Stretch {c.StretchMet}/{c.preset.stretchGoals.Count}: {c.StretchText(c.NextStretch)}"
+            string objective = c.failed ? "Failed" : stretch ? $"Stretch {c.StretchMet}/{c.preset.stretchGoals.Count}: {c.ProgressOf(c.NextStretch)}"
                 : c.completed ? "Complete: leave via the letter" : c.ProgressText;
             Style.ShadowLabel(BarText(bar), objective, Color.white);
 
@@ -163,7 +163,7 @@ namespace Roguelike
 
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
-            TooltipHandler.TipRegion(r, () => new Alert_RoguelikeNode().GetExplanation(), 0x52_4C_4E_44);
+            if (Mouse.IsOver(r)) NodeInfo.ForMap(c).Show();
 
             // The act map, a click away while building.
             if (node != null)
