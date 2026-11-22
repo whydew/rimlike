@@ -34,6 +34,8 @@ namespace Roguelike
         public int runs;
         public int wins;
         public List<string> unlocked = new List<string>();
+        /// <summary>Owned variety unlocks the player has switched off: their item stays out of the pools.</summary>
+        public List<string> disabled = new List<string>();
         /// <summary>Highest Ascension level unlocked (win at your highest level to unlock the next) and the one chosen for new runs.</summary>
         public int maxAscension;
         public int selectedAscension;
@@ -46,7 +48,9 @@ namespace Roguelike
             Scribe_Collections.Look(ref unlocked, "unlocked", LookMode.Value);
             Scribe_Values.Look(ref maxAscension, "maxAscension");
             Scribe_Values.Look(ref selectedAscension, "selectedAscension");
+            Scribe_Collections.Look(ref disabled, "disabled", LookMode.Value);
             unlocked ??= new List<string>();
+            disabled ??= new List<string>();
         }
     }
 
@@ -78,9 +82,22 @@ namespace Roguelike
 
         private static bool Unlocked(System.Func<UnlockDef, bool> match) => DefDatabase<UnlockDef>.AllDefs.Any(u => match(u) && IsUnlocked(u));
 
-        public static bool IsAvailable(RelicDef d) => !d.requiresUnlock || Unlocked(u => u.relic == d);
-        public static bool IsAvailable(GearRewardDef d) => !d.requiresUnlock || Unlocked(u => u.gear == d);
-        public static bool IsAvailable(BlueprintGroupDef d) => !d.requiresUnlock || Unlocked(u => u.blueprint == d);
+        public static bool IsEnabled(UnlockDef u) => !S.disabled.Contains(u.defName);
+        public static bool CanToggle(UnlockDef u) => u.KindLabel == "Variety" && IsUnlocked(u);
+
+        /// <summary>Switches an owned variety unlock in or out of the pools.</summary>
+        public static void Toggle(UnlockDef u)
+        {
+            if (!CanToggle(u)) return;
+            if (!S.disabled.Remove(u.defName)) S.disabled.Add(u.defName);
+            Save();
+        }
+
+        private static bool InPool(System.Func<UnlockDef, bool> match) => Unlocked(u => match(u) && IsEnabled(u));
+
+        public static bool IsAvailable(RelicDef d) => !d.requiresUnlock || InPool(u => u.relic == d);
+        public static bool IsAvailable(GearRewardDef d) => !d.requiresUnlock || InPool(u => u.gear == d);
+        public static bool IsAvailable(BlueprintGroupDef d) => !d.requiresUnlock || InPool(u => u.blueprint == d);
         public static bool IsStarterAvailable(ScenPart_RoguelikeRun part) => !part.requiresUnlock || Unlocked(u => u.starterId == part.starterId);
 
         public static float GraceDaysOffset => Owned.Sum(u => u.graceDaysOffset);
@@ -139,6 +156,7 @@ namespace Roguelike
             S.points = 0;
             S.runs = S.wins = 0;
             S.unlocked.Clear();
+            S.disabled.Clear();
             S.maxAscension = S.selectedAscension = 0;
             ScenarioLister.MarkDirty();
         }
@@ -172,7 +190,7 @@ namespace Roguelike
         private const float TileH = 138f;
         private const float Gap = 12f;
 
-        private static Vector2 scroll;
+        internal static Vector2 scroll;
         private static float openedAt, lastDrawn = -10f, shownPoints;
         private static readonly Dictionary<string, float> bought = new Dictionary<string, float>();
         private static readonly Dictionary<string, float> hover = new Dictionary<string, float>();
@@ -324,8 +342,9 @@ namespace Roguelike
             float appear = Style.EaseOutCubic(t / 0.35f);
             if (appear <= 0f) return;
             bool owned = MetaProgress.IsUnlocked(u), affordable = MetaProgress.CanBuy(u);
+            bool toggle = MetaProgress.CanToggle(u), off = toggle && !MetaProgress.IsEnabled(u);
             var c = KindColor(u);
-            bool over = !owned && Mouse.IsOver(tile);
+            bool over = (!owned || toggle) && Mouse.IsOver(tile);
             float h = hover.TryGetValue(u.defName, out var hv) ? hv : 0f;
             if (Event.current.type == EventType.Repaint) hover[u.defName] = h = Mathf.MoveTowards(h, over ? 1f : 0f, Time.unscaledDeltaTime * 8f);
             float flash = bought.TryGetValue(u.defName, out var at) ? Mathf.Clamp01(1f - (Style.Now - at) / 0.7f) : 0f;
@@ -333,13 +352,13 @@ namespace Roguelike
             var r = tile;
             r.y += (1f - appear) * 20f - 4f * h * (affordable ? 1f : 0.3f);
             var old = GUI.color;
-            GUI.color = new Color(1f, 1f, 1f, appear * (owned ? 0.8f : affordable ? 1f : 0.7f));
+            GUI.color = new Color(1f, 1f, 1f, appear * (off ? 0.45f : owned ? 0.8f : affordable ? 1f : 0.7f));
 
             float aura = (affordable ? 0.12f + 0.1f * Style.Pulse(2.2f, tile.x * 0.01f) : 0f) + 0.3f * h + 0.6f * flash;
             if (aura > 0f) Style.GlowAround(r, new Color(c.r, c.g, c.b, aura), 1.15f, Style.SoftGlow);
             Style.Tex(r, Style.CardBody, Color.white);
             Style.Box(r, new Color(c.r, c.g, c.b, owned ? 0.08f : 0.04f + 0.06f * h));
-            Style.Border(r, owned ? new Color(StarterC.r, StarterC.g, StarterC.b, 0.6f) : new Color(c.r, c.g, c.b, affordable ? 0.75f + 0.25f * h : 0.3f), affordable || owned ? 1.5f : 1f);
+            Style.Border(r, off ? new Color(0.5f, 0.5f, 0.5f, 0.4f + 0.3f * h) : owned ? new Color(StarterC.r, StarterC.g, StarterC.b, 0.6f + 0.3f * h) : new Color(c.r, c.g, c.b, affordable ? 0.75f + 0.25f * h : 0.3f), affordable || owned ? 1.5f : 1f);
             Style.Box(new Rect(r.x, r.y, r.width, 2f), new Color(c.r, c.g, c.b, 0.9f));
 
             // Icon.
@@ -370,7 +389,13 @@ namespace Roguelike
             // Footer: cost badge or owned mark.
             var foot = new Rect(r.x + 10f, r.yMax - 28f, r.width - 20f, 20f);
             Text.Anchor = TextAnchor.MiddleRight;
-            if (owned) Style.ShadowLabel(foot, "✓ OWNED", StarterC);
+            if (toggle)
+            {
+                Style.ShadowLabel(foot, off ? "OFF" : "✓ IN POOL", off ? new Color(0.65f, 0.65f, 0.65f) : StarterC);
+                Text.Anchor = TextAnchor.MiddleLeft;
+                if (over) Style.ShadowLabel(foot, off ? "Click to add back" : "Click to remove", new Color(1f, 1f, 1f, 0.7f));
+            }
+            else if (owned) Style.ShadowLabel(foot, "✓ OWNED", StarterC);
             else
             {
                 var badge = new Rect(foot.xMax - 64f, foot.y - 2f, 64f, 24f);
@@ -390,6 +415,11 @@ namespace Roguelike
             if (flash > 0f) Style.Box(r, new Color(1f, 1f, 1f, 0.6f * flash));
             GUI.color = old;
 
+            if (toggle && Widgets.ButtonInvisible(tile))
+            {
+                MetaProgress.Toggle(u);
+                (off ? SoundDefOf.Checkbox_TurnedOn : SoundDefOf.Checkbox_TurnedOff).PlayOneShotOnCamera();
+            }
             if (affordable && Widgets.ButtonInvisible(tile) && MetaProgress.TryBuy(u))
             {
                 bought[u.defName] = Style.Now;

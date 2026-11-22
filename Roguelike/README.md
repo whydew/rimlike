@@ -58,7 +58,7 @@ Act shape (row sizes and spacing) is in `Source/RunMap.cs`.
 | `wipe` | Losing the squad ends the run |
 | `rewards` | Card screen (incl. a mid-pick screenshot), every reward kind incl. research, relic effects, blueprint build-menu gate |
 | `variety` | Every node kind, objective and weather modifier, and every event |
-| `meta` | Points, buying unlocks, locked content, stacking relics, gear sets, unlock badges, end-of-run and unlock screens |
+| `meta` | Points, buying unlocks, locked content, toggling variety unlocks, stacking relics, gear sets, unlock badges, end-of-run and unlock screens |
 | `meta` (also) | Ascension effects and unlocking |
 | `starter` | With `-Scenario <ScenarioDef>` (any roguelike starter, including the DLC ones): pawns, xenotypes, kit and signature relic |
 | `newrun` | Wipe, vanilla game-over suppressed, New colony and New run open the starter cards, then the ideoligion and squad cards, into a fresh run with exactly the chosen squad and ideoligion |

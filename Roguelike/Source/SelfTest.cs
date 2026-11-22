@@ -830,6 +830,13 @@ namespace Roguelike
             SelfTest.Check(RewardUtility.Generate(run, RunRewardKind.Cards).Count == 5, "power unlock (Lucky draw): reward draws grow to 5 cards");
             MetaProgress.TryBuy(Unlock("Roguelike_Unlock_MedKit"));
             SelfTest.Check(MetaProgress.IsAvailable(medKit) && RewardUtility.RelicPool(run).Contains(medKit), "variety unlock: the relic joins the pool");
+            var medKitUnlock = Unlock("Roguelike_Unlock_MedKit");
+            MetaProgress.Toggle(medKitUnlock);
+            SelfTest.Check(!RewardUtility.RelicPool(run).Contains(medKit) && MetaProgress.IsUnlocked(medKitUnlock), "variety unlock toggled off: stays owned, leaves the pool");
+            MetaProgress.Toggle(medKitUnlock);
+            SelfTest.Check(RewardUtility.RelicPool(run).Contains(medKit), "variety unlock toggled back on: rejoins the pool");
+            MetaProgress.Toggle(Unlock("Roguelike_Unlock_LuckyDraw"));
+            SelfTest.Check(MetaProgress.IsEnabled(Unlock("Roguelike_Unlock_LuckyDraw")), "power unlocks can't be toggled");
             float grace = comp.GraceDays;
             MetaProgress.TryBuy(Unlock("Roguelike_Unlock_HeadStart"));
             SelfTest.Check(Math.Abs(comp.GraceDays - grace - 1f) < 0.01f, $"power unlock (Head start): grace {grace:0.0} -> {comp.GraceDays:0.0} days");
@@ -880,6 +887,12 @@ namespace Roguelike
             // Unlock screen.
             Find.WindowStack.Add(new Dialog_Unlocks());
             foreach (var w in Screenshot("s4_unlocks", world: false)) yield return w;
+            // Variety section, with one owned unlock switched off.
+            MetaProgress.Toggle(medKitUnlock);
+            UnlockList.scroll.y = 1700f;
+            foreach (var w in Screenshot("s4_unlocks_variety", world: false)) yield return w;
+            MetaProgress.Toggle(medKitUnlock);
+            UnlockList.scroll.y = 0f;
             Find.WindowStack.WindowOfType<Dialog_Unlocks>()?.Close(false);
 
             // End-of-run screen on a loss.
