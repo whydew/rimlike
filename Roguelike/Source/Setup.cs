@@ -570,22 +570,26 @@ namespace Roguelike
         internal static void DrawPawn(Rect inner, Pawn p, Color kind)
         {
             float a = GUI.color.a;
-            float size = Mathf.Clamp(inner.height - 40f - 40f - 12 * 11f, 40f, 88f); // name, two trait rows, twelve skills
-            var portrait = new Rect(inner.center.x - size / 2f, inner.y, size, size);
+            // Short cards (small screens) go compact: a small portrait beside the name and one row of traits, so all
+            // twelve skills still fit. Otherwise the portrait shrinks from 88px as needed.
+            bool compact = inner.height < 88f + 40f + 40f + 12 * 11f;
+            float size = compact ? 40f : Mathf.Clamp(inner.height - 40f - 40f - 12 * 11f, 40f, 88f);
+            var portrait = compact ? new Rect(inner.x, inner.y, size, size) : new Rect(inner.center.x - size / 2f, inner.y, size, size);
             Style.GlowAround(portrait, new Color(kind.r, kind.g, kind.b, 0.35f), 1.5f);
             GUI.DrawTexture(portrait, PortraitsCache.Get(p, portrait.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.4f));
             if (ModsConfig.BiotechActive && p.genes?.XenotypeIcon != null && p.genes.Xenotype != XenotypeDefOf.Baseliner)
                 Style.Tex(new Rect(inner.x, inner.y, 26f, 26f), p.genes.XenotypeIcon, new Color(1f, 1f, 1f, 0.9f));
 
-            float y = portrait.yMax + 2f;
+            float y = compact ? inner.y : portrait.yMax + 2f;
+            var text = compact ? new Rect(portrait.xMax + 6f, y, inner.xMax - portrait.xMax - 6f, 40f) : new Rect(inner.x, y, inner.width, 40f);
             Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.UpperCenter;
-            Style.ShadowLabel(new Rect(inner.x, y, inner.width, 22f), p.Name.ToStringShort, Style.Parchment);
+            Text.Anchor = compact ? TextAnchor.UpperLeft : TextAnchor.UpperCenter;
+            Style.ShadowLabel(new Rect(text.x, text.y, text.width, 22f), p.Name.ToStringShort.Truncate(text.width), Style.Parchment);
             Text.Font = GameFont.Tiny;
             string who = $"{p.gender.GetLabel().CapitalizeFirst()}, {p.ageTracker.AgeBiologicalYears}" + (p.story?.Adulthood != null ? " · " + p.story.Adulthood.TitleCapFor(p.gender) : p.story?.Childhood != null ? " · " + p.story.Childhood.TitleCapFor(p.gender) : "");
-            Style.ShadowLabel(new Rect(inner.x, y + 20f, inner.width, 16f), who.Truncate(inner.width), new Color(kind.r, kind.g, kind.b, 0.95f));
+            Style.ShadowLabel(new Rect(text.x, text.y + 20f, text.width, 16f), who.Truncate(text.width), new Color(kind.r, kind.g, kind.b, 0.95f));
             Text.Anchor = TextAnchor.UpperLeft;
-            y += 40f;
+            y += compact ? 44f : 40f;
 
             // Traits as chips.
             float x = inner.x, traitTop = y;
@@ -594,7 +598,7 @@ namespace Roguelike
                 string label = trait.LabelCap;
                 float w = Text.CalcSize(label).x + 10f;
                 if (x + w > inner.xMax) { x = inner.x; y += 18f; }
-                if (y > traitTop + 18f) break; // the tooltip lists them all
+                if (y > traitTop + (compact ? 0f : 18f)) break; // the tooltip lists them all
                 var chip = new Rect(x, y, w, 16f);
                 Style.Box(chip, new Color(kind.r, kind.g, kind.b, 0.18f));
                 Style.Border(chip, new Color(kind.r, kind.g, kind.b, 0.45f), 1f);

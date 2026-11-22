@@ -213,7 +213,8 @@ namespace Roguelike
             if (n.preset.kind != NodeKind.Expedition || n.IsBoss) return;
             var eligible = Expeditions.Where(p => p.Eligible(this, n.tile, squad).Accepted).ToList();
             var used = siblings?.ToList() ?? new List<NodePresetDef>();
-            if (eligible.Any(p => !used.Contains(p))) eligible.RemoveAll(p => used.Contains(p) && p != n.preset);
+            // A sibling's objective is out (even this node's current one) while any other is left.
+            if (eligible.Any(p => !used.Contains(p))) eligible.RemoveAll(used.Contains);
             if (eligible.Count == 0) return;
             var unlocked = eligible.Where(p => p.Gated).ToList();
             bool currentOk = eligible.Contains(n.preset);
@@ -221,10 +222,6 @@ namespace Roguelike
             {
                 var pool = !currentOk || unlocked.Count == 0 ? eligible : unlocked;
                 n.preset = pool.RandomElementByWeight(p => p.weight);
-            }
-            else if (used.Contains(n.preset) && eligible.Any(p => p != n.preset))
-            {
-                n.preset = eligible.Where(p => p != n.preset).RandomElementByWeight(p => p.weight); // a sibling already has it
             }
             if (n.preset.randomModifier && n.modifier == null) n.modifier = ModifierPool.PickFor(n.tile);
         }
