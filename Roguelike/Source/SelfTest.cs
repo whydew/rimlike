@@ -629,6 +629,15 @@ namespace Roguelike
             int components = CanMine(ThingDefOf.ComponentIndustrial), steel = CanMine(ThingDefOf.Steel);
             SelfTest.Check(components >= 24 && steel >= 900, $"renewable campus: enough to mine ({components} components, {steel} steel)");
 
+            // Node maps get starting-tile ore: the nomadic cut for later maps doesn't apply during a run.
+            var scatter = new GenStep_ScatterLumpsMineable { countPer10kCellsRange = new FloatRange(10f, 10f), useNomadicMineables = true };
+            var difficulty = Find.Storyteller.difficulty;
+            float nomadic = difficulty.nomadicMineableResourcesFactor;
+            difficulty.nomadicMineableResourcesFactor = 0f;
+            int lumps = (int)AccessTools.Method(typeof(GenStep_ScatterLumpsMineable), "CalculateFinalCount").Invoke(scatter, new object[] { map });
+            difficulty.nomadicMineableResourcesFactor = nomadic;
+            SelfTest.Check(map.IsStartingMap || lumps > 0 && scatter.useNomadicMineables, $"node maps get full ore, as on a starting tile ({lumps} lumps with a zero nomadic factor)");
+
             // Seasonal endurance under a psychic drone: a death fails it.
             var psychic = DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingPsychic");
             foreach (var w in EnterDebugNode("Roguelike_SeasonalEndurance", psychic)) yield return w;
@@ -1055,8 +1064,10 @@ namespace Roguelike
             // Click through the remaining setup pages.
             var startTile = newRun.Row(0).First().tile;
             Ideo chosenIdeo = null;
-            List<Pawn> chosenPawns = null;
-            for (int i = 0; i < 12 && Current.ProgramState != ProgramState.Playing; i++)
+            List<Pawn> chosenPawns = null, firstCandidates = null;
+            List<Ideo> firstOptions = null;
+            bool flipped = false;
+            for (int i = 0; i < 16 && Current.ProgramState != ProgramState.Playing; i++)
             {
                 var box = Find.WindowStack.WindowOfType<Dialog_MessageBox>();
                 if (box != null)
@@ -1080,16 +1091,36 @@ namespace Roguelike
                 if (page is Page_RoguelikeIdeo ideoPage)
                 {
                     yield return Frames(30);
-                    SelfTest.Check(ideoPage.Options.Count == 3 && ideoPage.Options.Select(o => o.name).Distinct().Count() == 3, $"new run: three ideoligion cards ({string.Join(", ", ideoPage.Options.Select(o => o.name))})");
-                    SelfTest.Check(!(bool)AccessTools.Method(typeof(Page_RoguelikeIdeo), "CanDoNext").Invoke(ideoPage, null), "new run: an ideoligion must be picked");
-                    ideoPage.Selected = 1;
-                    chosenIdeo = ideoPage.Options[1];
-                    foreach (var w in Screenshot("s7_ideo", world: false)) yield return w;
+                    if (!flipped)
+                    {
+                        SelfTest.Check(ideoPage.Options.Count == 3 && ideoPage.Options.Select(o => o.name).Distinct().Count() == 3, $"new run: three ideoligion cards ({string.Join(", ", ideoPage.Options.Select(o => o.name))})");
+                        SelfTest.Check(!(bool)AccessTools.Method(typeof(Page_RoguelikeIdeo), "CanDoNext").Invoke(ideoPage, null), "new run: an ideoligion must be picked");
+                        firstOptions = ideoPage.Options.ToList();
+                        ideoPage.Selected = 1;
+                        foreach (var w in Screenshot("s7_ideo", world: false)) yield return w;
+                    }
+                    else
+                    {
+                        SelfTest.Check(ideoPage.Options.SequenceEqual(firstOptions), "new run: Back to the ideoligion page keeps the same three options");
+                        ideoPage.Selected = 2; // a different one this time
+                    }
+                    chosenIdeo = ideoPage.Options[ideoPage.Selected];
                 }
                 if (page is Page_RoguelikePawns pawnPage)
                 {
                     yield return Frames(30);
                     SelfTest.Check(pawnPage.Pawns.Count == 10, $"new run: ten candidate colonists ({pawnPage.Pawns.Count}), up to {pawnPage.MaxPick} can go");
+                    if (!flipped)
+                    {
+                        // Back to the ideoligion page and forward again with another ideoligion.
+                        firstCandidates = pawnPage.Pawns.ToList();
+                        flipped = true;
+                        AccessTools.Method(typeof(Page), "DoBack").Invoke(pawnPage, null);
+                        yield return Frames(60);
+                        continue;
+                    }
+                    SelfTest.Check(pawnPage.Pawns.SequenceEqual(firstCandidates), "new run: switching ideoligion keeps the same squad candidates");
+                    SelfTest.Check(!ModsConfig.IdeologyActive || pawnPage.Pawns.All(p => p.Ideo == chosenIdeo), "new run: the candidates take the newly chosen ideoligion");
                     for (int k = 0; k < pawnPage.Pawns.Count; k++) if (k % 3 == 0) pawnPage.Toggle(pawnPage.Pawns[k]);
                     SelfTest.Check(pawnPage.Picked.Count == Math.Min(pawnPage.MaxPick, 4), $"new run: picking is capped at {pawnPage.MaxPick} ({pawnPage.Picked.Count} picked)");
                     pawnPage.Toggle(pawnPage.Picked.Last());

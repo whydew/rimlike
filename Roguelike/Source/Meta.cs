@@ -537,7 +537,7 @@ namespace Roguelike
                 $"Reached act {run?.act ?? 1} of {WorldComponent_RoguelikeRun.ActsPerRun}" + (run != null && run.ascension > 0 ? $" at Ascension {run.ascension}" : ""),
                 $"Nodes cleared: {run?.nodes.Count(n => n.state == RunNodeState.Completed) ?? 0} of {run?.nodes.Count ?? 0}",
                 $"Squad: {PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.Count()} alive",
-                $"Relics: {(run == null || run.relics.Count == 0 ? "none" : string.Join(", ", run.relics.Select(r => r.label)))}",
+                $"Relics: {(run == null || run.relics.Count == 0 ? "none" : string.Join(", ", run.relics.GroupBy(r => r).Select(g => g.Key.label + (g.Count() > 1 ? $" ×{g.Count()}" : ""))))}",
                 $"Blueprints: {(run == null || run.blueprints.Count == 0 ? "none" : string.Join(", ", run.blueprints.Select(b => b.label)))}",
                 $"Meta points earned this run: {shown} (you now have {MetaProgress.S.points - earned + shown})",
             };

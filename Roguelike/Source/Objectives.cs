@@ -34,7 +34,7 @@ namespace Roguelike
         /// <summary>" (slightly impressive)" for a room with a quality bar.</summary>
         private string Quality => IsRoom && minImpressiveness > 0f ? $", {RoomStatDefOf.Impressiveness.GetScoreStage(minImpressiveness).label}" : "";
 
-        private string HoldText => holdDays > 0f ? $" for {holdDays:0.#} days" : "";
+        private string HoldText => holdDays > 0f ? $" for {holdDays:0.#} days in total" : "";
 
         public int Target(int squad) => kind is RequirementKind.NoDeaths or RequirementKind.DiningRoom ? 1 : perColonist ? count * squad : count;
 
@@ -48,7 +48,7 @@ namespace Roguelike
             RequirementKind.Shelter => $"{Target(squad)} beds indoors",
             RequirementKind.NoDeaths => "nobody dies",
             _ => "",
-        } + HoldText;
+        } + HoldText + (holdDays > 0f ? " (the count pauses while it isn't met; once reached, it stays done)" : "");
 
         /// <summary>The requirement in a few words, for a card.</summary>
         public string Card(int squad) => kind switch
@@ -63,7 +63,9 @@ namespace Roguelike
             _ => "",
         } + HoldText;
 
-        public string Short(int squad, int have, float held) => ShortCount(squad, have) + (holdDays > 0f ? $" (held {System.Math.Min(held, holdDays):0.#}/{holdDays:0.#} days)" : "");
+        public string Short(int squad, int have, float held) =>
+            holdDays > 0f && held >= holdDays ? $"{ShortCount(squad, Target(squad))} (held {holdDays:0.#} days: done)"
+            : ShortCount(squad, have) + (holdDays > 0f ? $" (held {held:0.#}/{holdDays:0.#} days)" : "");
 
         private string ShortCount(int squad, int have) => kind switch
         {
@@ -102,6 +104,25 @@ namespace Roguelike
                 return ext.tileTemperature.Includes(temp) && (!ext.coastalOnly || coastal);
             }).ToList();
             return options.RandomElementByWeightWithFallback(d => d.GetModExtension<ModifierExtension>().weight);
+        }
+    }
+
+    /// <summary>
+    /// During a run every node map is scattered with ore like a starting tile: vanilla cuts mineables on later maps by the
+    /// difficulty's nomadic factor, which would starve a squad that moves to a new map every node.
+    /// </summary>
+    [HarmonyLib.HarmonyPatch(typeof(GenStep_ScatterLumpsMineable), "CalculateFinalCount")]
+    public static class Patch_ScatterLumpsMineable_FullAmount
+    {
+        public static void Prefix(GenStep_ScatterLumpsMineable __instance, out bool __state)
+        {
+            __state = __instance.useNomadicMineables && WorldComponent_RoguelikeRun.Get is { active: true };
+            if (__state) __instance.useNomadicMineables = false;
+        }
+
+        public static void Finalizer(GenStep_ScatterLumpsMineable __instance, bool __state)
+        {
+            if (__state) __instance.useNomadicMineables = true; // the GenStep is shared by every map
         }
     }
 

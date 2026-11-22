@@ -343,6 +343,7 @@ namespace Roguelike
     public class Page_RoguelikeIdeo : RoguelikePage
     {
         private readonly List<Ideo> options = new List<Ideo>();
+        private RimWorld.Planet.World optionsWorld, pawnsWorld;
         private readonly float[] hover = new float[3];
         private int selected = -1;
 
@@ -368,7 +369,7 @@ namespace Roguelike
                     ? new IdeoGenerationParms(def, forceNoExpansionIdeo: false, null, null, name: def.ideoName, styles: def.styles, deities: def.deityPresets, hidden: def.hiddenIdeo, description: def.ideoDescription, forcedMemes: def.forcedMemes, classicExtra: false, forceNoWeaponPreference: false, forNewFluidIdeo: false, fixedIdeo: true, requiredPreceptsOnly: def.requiredPreceptsOnly)
                     : new IdeoGenerationParms(def));
             }
-            Generate();
+            if (optionsWorld != Find.World || options.Count == 0) { Generate(); optionsWorld = Find.World; } // Back keeps the options
         }
 
         /// <summary>Three ideoligions, each built on a different structure meme so the choice is a real one.</summary>
@@ -381,6 +382,7 @@ namespace Roguelike
                 var ideo = IdeoGenerator.GenerateIdeo(new IdeoGenerationParms(Find.FactionManager.OfPlayer.def));
                 var structure = ideo.memes.FirstOrDefault(m => m.category == MemeCategory.Structure);
                 if (structure != null && used.Contains(structure) && attempt < 20) continue;
+                if (options.Any(o => o.name == ideo.name) && attempt < 28) continue; // no two cards with the same name
                 if (structure != null) used.Add(structure);
                 options.Add(ideo);
             }
@@ -439,7 +441,7 @@ namespace Roguelike
                 Text.Font = GameFont.Small;
                 if (h > 0.05f) Style.SheenSweep(r, Mathf.Repeat(Style.Now * 0.7f, 1.6f), 0.15f * h);
                 GUI.color = old;
-                TooltipHandler.TipRegion(rects[i], ideo.description);
+                TooltipHandler.TipRegion(rects[i], () => FullText(ideo), ideo.id);
 
                 if (Widgets.ButtonInvisible(rects[i]))
                 {
@@ -448,6 +450,14 @@ namespace Roguelike
                     SoundDefOf.Tick_High.PlayOneShotOnCamera();
                 }
             }
+        }
+
+        /// <summary>The description and every visible precept, for the card's tooltip.</summary>
+        private static string FullText(Ideo ideo)
+        {
+            var precepts = ideo.PreceptsListForReading.Where(p => p.def.visible && p.def.issue != null)
+                .OrderBy(p => p.def.issue.label).Select(p => $"{p.def.issue.LabelCap}: {p.def.LabelCap}");
+            return ideo.description + "\n\nPrecepts:\n" + string.Join("\n", precepts);
         }
 
         private static IEnumerable<Precept> KeyPrecepts(Ideo ideo) =>
@@ -463,8 +473,19 @@ namespace Roguelike
             foreach (var other in Find.IdeoManager.IdeosListForReading) other.initialPlayerIdeo = false;
             ideo.initialPlayerIdeo = true;
             Find.IdeoManager.Add(ideo);
-            Find.IdeoManager.RemoveUnusedStartingIdeos();
-            Find.Scenario.PostIdeoChosen();
+            var init = Find.GameInitData;
+            if (pawnsWorld == Find.World && init.startingAndOptionalPawns.Count > 0)
+            {
+                // Back and forth: keep the squad candidates, just give them the new beliefs.
+                foreach (var p in init.startingAndOptionalPawns) p.ideo?.SetIdeo(ideo);
+                Find.IdeoManager.RemoveUnusedStartingIdeos();
+            }
+            else
+            {
+                Find.IdeoManager.RemoveUnusedStartingIdeos();
+                Find.Scenario.PostIdeoChosen();
+                pawnsWorld = Find.World;
+            }
             base.DoNext();
         }
     }
@@ -476,6 +497,7 @@ namespace Roguelike
         private readonly List<Pawn> picked = new List<Pawn>();
         private float[] hover;
         private int maxPick;
+        private List<Pawn> preparedFor; // the candidate list already topped up to ten, so Back and forth doesn't re-roll
 
         public IReadOnlyList<Pawn> Pawns => Find.GameInitData.startingAndOptionalPawns;
         public IReadOnlyList<Pawn> Picked => picked;
@@ -495,7 +517,8 @@ namespace Roguelike
             // Extra candidates default to plain colonists; give them the scenario's own pawn requests (xenotypes,
             // pawn kinds) in turn so all ten fit the starter.
             bool themed = Find.Scenario.AllParts.Any(p => p is ScenPart_ConfigPage_ConfigureStartingPawns_Xenotypes || p is ScenPart_ConfigPage_ConfigureStartingPawns_KindDefs);
-            for (int i = maxPick; i < Candidates; i++)
+            bool prepared = preparedFor != null && preparedFor.Count >= Candidates && preparedFor.SequenceEqual(init.startingAndOptionalPawns);
+            for (int i = maxPick; i < Candidates && !prepared; i++)
             {
                 if (themed) StartingPawnUtility.SetGenerationRequest(i, StartingPawnUtility.GetGenerationRequest(i % maxPick));
                 if (i < init.startingAndOptionalPawns.Count)
@@ -504,6 +527,7 @@ namespace Roguelike
                 }
                 else StartingPawnUtility.AddNewPawn(i);
             }
+            preparedFor = init.startingAndOptionalPawns.ToList();
             hover = new float[init.startingAndOptionalPawns.Count];
             picked.RemoveAll(p => !init.startingAndOptionalPawns.Contains(p)); // Back + new ideoligion re-rolls the candidates
         }

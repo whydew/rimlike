@@ -463,6 +463,8 @@ namespace Roguelike
                         : $"{s.def.skillLabel.CapitalizeFirst()} {s.Level}{new string('+', (int)s.passion)}");
                 sb.AppendLine("Skills: " + string.Join(", ", skills));
             }
+            var incapable = p.CombinedDisabledWorkTags.GetAllSelectedItems<WorkTags>().Where(t => t != WorkTags.None).Select(t => t.LabelTranslated().CapitalizeFirst()).ToList();
+            if (incapable.Count > 0) sb.AppendLine("Incapable of: " + string.Join(", ", incapable));
             var health = p.health.hediffSet.hediffs.Where(h => h.Visible).Select(h => h.LabelCap).Distinct().ToList();
             sb.Append("Health: " + (health.Count == 0 ? "healthy" : string.Join(", ", health)));
             return sb.ToString();

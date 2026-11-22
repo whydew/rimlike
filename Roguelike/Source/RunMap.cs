@@ -37,6 +37,8 @@ namespace Roguelike
         public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, SquadSize);
 
         /// <summary>The squad size a node will see on arrival (requirement counts scale with it), clamped as on entry.</summary>
+        private static int Choices => WorldComponent_RoguelikeRun.Get is { } run ? RewardUtility.ChoiceCount(run) : 3;
+
         public static int SquadSize => Mathf.Clamp(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_FreeColonists.Count(), 1, 5);
         public List<int> next = new List<int>();
 
@@ -45,9 +47,9 @@ namespace Roguelike
         /// <summary>The reward in a few words, for a card.</summary>
         public string RewardShort => reward switch
         {
-            RunRewardKind.Recruits => "Choose 1 of 3 recruits",
-            RunRewardKind.Relics => "Choose 1 of 3 relics",
-            RunRewardKind.Cards => IsBoss ? "A card, then the next act" : "Choose 1 of 3 cards",
+            RunRewardKind.Recruits => $"Choose 1 of {Choices} recruits",
+            RunRewardKind.Relics => $"Choose 1 of {Choices} relics",
+            RunRewardKind.Cards => IsBoss ? "A card, then the next act" : $"Choose 1 of {Choices} cards",
             _ => IsBoss ? "Wins the run" : preset.HasMap ? "None" : "Whatever you find here",
         };
 
@@ -55,9 +57,9 @@ namespace Roguelike
 
         public string RewardText => reward switch
         {
-            RunRewardKind.Recruits => "Reward: choose 1 of 3 recruits.",
-            RunRewardKind.Relics => "Reward: choose 1 of 3 relics.",
-            RunRewardKind.Cards => IsBoss ? "Reward: choose a card, then the next act begins." : "Reward: choose 1 of 3 cards (relic, gear, implant or blueprint).",
+            RunRewardKind.Recruits => $"Reward: choose 1 of {Choices} recruits.",
+            RunRewardKind.Relics => $"Reward: choose 1 of {Choices} relics.",
+            RunRewardKind.Cards => IsBoss ? "Reward: choose a card, then the next act begins." : $"Reward: choose 1 of {Choices} cards (relic, gear, implant or blueprint).",
             _ => IsBoss ? "Reward: wins the run." : "Reward: none (events resolve on the spot).",
         };
 

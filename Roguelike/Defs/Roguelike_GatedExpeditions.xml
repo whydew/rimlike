@@ -87,6 +87,8 @@
     <description>Grow rice under lamps, whatever the weather outside.</description>
     <requiresBlueprints><li>Roguelike_BP_Farming</li><li>Roguelike_BP_Power</li></requiresBlueprints>
     <requiresResearch><li>Electricity</li><li>Hydroponics</li></requiresResearch>
+    <!-- 6 basins + sun lamp + ~3.3 kW of daytime power (2 solar): ~850 steel, 12 components. -->
+    <ensureMineable><Steel>1000</Steel><ComponentIndustrial>14</ComponentIndustrial></ensureMineable>
     <requirements>
       <li><kind>Build</kind><thing>HydroponicsBasin</thing><count>6</count></li>
       <li><kind>Build</kind><thing>SunLamp</thing><count>1</count></li>

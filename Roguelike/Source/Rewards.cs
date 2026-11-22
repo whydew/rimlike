@@ -150,9 +150,13 @@ namespace Roguelike
         public static IEnumerable<GearRewardDef> GearPool(bool implant) =>
             DefDatabase<GearRewardDef>.AllDefs.Where(g => g.implant == implant && MetaProgress.IsAvailable(g));
 
+        /// <summary>How many cards a reward screen shows: 3, plus relics and meta bonuses, minus Ascension 3+.</summary>
+        public static int ChoiceCount(WorldComponent_RoguelikeRun run) =>
+            Mathf.Max(2, 3 + run.relics.Sum(r => r.extraRewardChoices) + MetaProgress.ExtraRewardChoices + run.RewardChoiceOffset);
+
         public static List<RewardCard> Generate(WorldComponent_RoguelikeRun run, RunRewardKind nodeReward)
         {
-            int count = Mathf.Max(2, 3 + run.relics.Sum(r => r.extraRewardChoices) + MetaProgress.ExtraRewardChoices + run.RewardChoiceOffset);
+            int count = ChoiceCount(run);
             var cards = new List<RewardCard>();
             for (int i = 0; i < count; i++)
             {
@@ -343,11 +347,6 @@ namespace Roguelike
                 if (def.Worker.CanFireNow(parms) && def.Worker.TryExecute(parms)) return true;
             }
             return false;
-        }
-
-        public static void EnsureHediff(Pawn pawn, HediffDef def)
-        {
-            EnsureHediff(pawn, def, 1);
         }
 
         /// <summary>Adds the hediff if missing and sets its severity to the relic's stack count.</summary>

@@ -264,7 +264,7 @@ namespace Roguelike
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.UpperRight;
             Style.ShadowLabel(new Rect(r.xMax - 520f, r.y + 10f, 520f, 54f),
-                "Click a tile to add, right-click to remove. Shift-click for all or none.\nThe whole squad leaves; what isn't packed stays behind.", new Color(1f, 1f, 1f, 0.6f * a));
+                "Click a tile to add, right-click to remove. Shift-click for all or none, ctrl-click for an exact amount.\nThe whole squad leaves; what isn't packed stays behind.", new Color(1f, 1f, 1f, 0.6f * a));
             Text.Anchor = TextAnchor.UpperLeft;
             Text.Font = GameFont.Small;
         }
@@ -367,7 +367,12 @@ namespace Roguelike
                 {
                     bool shift = Event.current.shift;
                     int step = g.available <= 10 ? 1 : Mathf.CeilToInt(g.available / 10f);
-                    if (Event.current.button == 0) { Set(g, shift ? g.available : g.chosen + step); SoundDefOf.Tick_High.PlayOneShotOnCamera(); }
+                    if (Event.current.button == 0 && Event.current.control)
+                    {
+                        var group = g;
+                        Find.WindowStack.Add(new Dialog_Slider(n => $"Take {n} {group.Label}", 0, group.available, n => Set(group, n), group.chosen));
+                    }
+                    else if (Event.current.button == 0) { Set(g, shift ? g.available : g.chosen + step); SoundDefOf.Tick_High.PlayOneShotOnCamera(); }
                     else if (Event.current.button == 1) { Set(g, shift ? 0 : g.chosen - step); SoundDefOf.Tick_Low.PlayOneShotOnCamera(); }
                     Event.current.Use();
                 }
