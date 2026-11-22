@@ -34,7 +34,10 @@ namespace Roguelike
         /// <summary>Its objective has been shown on a next-node card (and is now fixed).</summary>
         public bool offered;
 
-        public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, 3);
+        public string Briefing => preset.BriefingFor(preset.randomModifier ? modifier : preset.condition, SquadSize);
+
+        /// <summary>The squad size a node will see on arrival (requirement counts scale with it), clamped as on entry.</summary>
+        public static int SquadSize => Mathf.Clamp(PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_FreeColonists.Count(), 1, 5);
         public List<int> next = new List<int>();
 
         public bool IsBoss => type == RunNodeType.Boss;
@@ -186,7 +189,7 @@ namespace Roguelike
             var squad = PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists.ToList();
             foreach (var n in options.Where(n => !n.offered))
             {
-                RefreshObjective(n, squad);
+                RefreshObjective(n, squad, options.Where(o => o != n).Select(o => o.preset));
                 n.offered = true;
             }
             var cards = options.Select(n => new RewardCard { kind = RewardKind.Path, pathNode = n }).ToList();
@@ -205,10 +208,12 @@ namespace Roguelike
         /// When an expedition is first offered as a next node, make sure the squad can do it (blueprints, research, skills,
         /// season); re-roll if not. Objectives that drafted blueprints have unlocked sometimes take its place.
         /// </summary>
-        public void RefreshObjective(RunNode n, List<Pawn> squad)
+        public void RefreshObjective(RunNode n, List<Pawn> squad, IEnumerable<NodePresetDef> siblings = null)
         {
             if (n.preset.kind != NodeKind.Expedition || n.IsBoss) return;
             var eligible = Expeditions.Where(p => p.Eligible(this, n.tile, squad).Accepted).ToList();
+            var used = siblings?.ToList() ?? new List<NodePresetDef>();
+            if (eligible.Any(p => !used.Contains(p))) eligible.RemoveAll(p => used.Contains(p) && p != n.preset);
             if (eligible.Count == 0) return;
             var unlocked = eligible.Where(p => p.Gated).ToList();
             bool currentOk = eligible.Contains(n.preset);
@@ -216,6 +221,10 @@ namespace Roguelike
             {
                 var pool = !currentOk || unlocked.Count == 0 ? eligible : unlocked;
                 n.preset = pool.RandomElementByWeight(p => p.weight);
+            }
+            else if (used.Contains(n.preset) && eligible.Any(p => p != n.preset))
+            {
+                n.preset = eligible.Where(p => p != n.preset).RandomElementByWeight(p => p.weight); // a sibling already has it
             }
             if (n.preset.randomModifier && n.modifier == null) n.modifier = ModifierPool.PickFor(n.tile);
         }

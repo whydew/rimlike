@@ -75,7 +75,7 @@ namespace Roguelike
             gearMass = pawns.Sum(p => MassUtility.GearMass(p));
 
             foreach (var t in CaravanFormingUtility.AllReachableColonyItems(map, allowEvenIfOutsideHomeArea: true, allowEvenIfReserved: true, canMinify: true))
-                if (t is not Corpse) Add(t, carried: false);
+                if (t is not Corpse && t.Spawned) Add(t, carried: false); // depart moves spawned items only
             foreach (var p in pawns)
                 foreach (var t in p.inventory.innerContainer.ToList())
                     Add(t, carried: true);

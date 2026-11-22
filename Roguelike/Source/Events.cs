@@ -81,13 +81,13 @@ namespace Roguelike
             switch (outcome.kind)
             {
                 case EventOutcomeKind.RandomRelic:
-                    var relic = RewardUtility.RelicPool(run).RandomElementWithFallback();
+                    var relic = RewardUtility.RelicPool(run).RandomElementByWeightWithFallback(r => r.Weight);
                     if (relic == null) return null;
                     run.AddRelic(relic);
                     return $"Gained relic: {relic.LabelCap}.";
                 case EventOutcomeKind.RandomGear:
                 case EventOutcomeKind.RandomImplant:
-                    var gear = RewardUtility.GearPool(outcome.kind == EventOutcomeKind.RandomImplant).RandomElementWithFallback();
+                    var gear = RewardUtility.GearPool(outcome.kind == EventOutcomeKind.RandomImplant).RandomElementByWeightWithFallback(g => g.weight);
                     if (gear == null) return null;
                     RewardUtility.Apply(new RewardCard { kind = RewardKind.Gear, gear = gear }, null, caravan);
                     return $"Gained: {gear.LabelCap}.";

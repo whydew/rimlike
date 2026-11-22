@@ -505,6 +505,7 @@ namespace Roguelike
                 else StartingPawnUtility.AddNewPawn(i);
             }
             hover = new float[init.startingAndOptionalPawns.Count];
+            picked.RemoveAll(p => !init.startingAndOptionalPawns.Contains(p)); // Back + new ideoligion re-rolls the candidates
         }
 
         public void Toggle(Pawn p)
@@ -569,7 +570,8 @@ namespace Roguelike
         internal static void DrawPawn(Rect inner, Pawn p, Color kind)
         {
             float a = GUI.color.a;
-            var portrait = new Rect(inner.center.x - 44f, inner.y, 88f, 88f);
+            float size = Mathf.Clamp(inner.height - 40f - 40f - 12 * 11f, 40f, 88f); // name, two trait rows, twelve skills
+            var portrait = new Rect(inner.center.x - size / 2f, inner.y, size, size);
             Style.GlowAround(portrait, new Color(kind.r, kind.g, kind.b, 0.35f), 1.5f);
             GUI.DrawTexture(portrait, PortraitsCache.Get(p, portrait.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.4f));
             if (ModsConfig.BiotechActive && p.genes?.XenotypeIcon != null && p.genes.Xenotype != XenotypeDefOf.Baseliner)
@@ -586,12 +588,13 @@ namespace Roguelike
             y += 40f;
 
             // Traits as chips.
-            float x = inner.x;
+            float x = inner.x, traitTop = y;
             foreach (var trait in p.story?.traits?.allTraits ?? new List<Trait>())
             {
                 string label = trait.LabelCap;
                 float w = Text.CalcSize(label).x + 10f;
                 if (x + w > inner.xMax) { x = inner.x; y += 18f; }
+                if (y > traitTop + 18f) break; // the tooltip lists them all
                 var chip = new Rect(x, y, w, 16f);
                 Style.Box(chip, new Color(kind.r, kind.g, kind.b, 0.18f));
                 Style.Border(chip, new Color(kind.r, kind.g, kind.b, 0.45f), 1f);
@@ -607,7 +610,7 @@ namespace Roguelike
             if (p.skills != null)
             {
                 var skills = p.skills.skills.OrderBy(s => s.def.listOrder).ToList();
-                float rowH = Mathf.Clamp((inner.yMax - y) / skills.Count, 10f, 15f);
+                float rowH = Mathf.Clamp((inner.yMax - y) / skills.Count, 9f, 15f);
                 foreach (var s in skills)
                 {
                     if (y + rowH > inner.yMax + 1f) break;
@@ -646,6 +649,12 @@ namespace Roguelike
         {
             if (!base.CanDoNext() || picked.Count == 0) return false;
             var init = Find.GameInitData;
+            foreach (var req in init.startingPawnsRequired ?? new List<PawnKindCount>())
+                if (picked.Count(p => p.kindDef == req.kindDef) < req.count)
+                {
+                    Messages.Message($"This starter needs {req.count} {req.kindDef.label} in the squad.", MessageTypeDefOf.RejectInput, historical: false);
+                    return false;
+                }
             if (picked.Any(p => (p.DevelopmentalStage & init.allowedDevelopmentalStages) == 0))
             {
                 Messages.Message("SelectedCharactersMustBeOfAllowedDevelopmentalStages".Translate(init.allowedDevelopmentalStages.ToCommaListOr()), MessageTypeDefOf.RejectInput, historical: false);

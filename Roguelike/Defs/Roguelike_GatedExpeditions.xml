@@ -11,6 +11,7 @@
     <description>Grow cotton, set up a tailor's workshop and dress the whole squad in new clothes, with cloth to spare.</description>
     <requiresBlueprints><li>Roguelike_BP_Crafting</li></requiresBlueprints>
     <requiresResearch><li>ComplexClothing</li></requiresResearch>
+    <growingTwelfths>4</growingTwelfths> <!-- cotton for the spare cloth -->
     <requirements>
       <li><kind>Produce</kind><thing>Apparel_Duster</thing><count>1</count><perColonist>true</perColonist></li>
       <li><kind>Produce</kind><thing>Apparel_BasicShirt</thing><count>1</count><perColonist>true</perColonist></li>

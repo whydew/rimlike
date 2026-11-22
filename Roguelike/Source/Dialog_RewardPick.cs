@@ -340,7 +340,7 @@ namespace Roguelike
 
             Style.ShadowLabel(new Rect(body.x, y, body.width, 14f), p.HasMap ? "OBJECTIVE" : "ON ARRIVAL", head);
             y += 14f;
-            var lines = p.ObjectiveLines(3);
+            var lines = p.ObjectiveLines(RunNode.SquadSize);
             for (int i = 0; i < lines.Count; i++)
             {
                 string line = "• " + lines[i];

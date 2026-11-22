@@ -135,7 +135,8 @@ namespace Roguelike
             // Plain rock only (not other ore), else open ground.
             bool Rock(IntVec3 c) => c.GetEdifice(map) is { } e && e.def.building?.isNaturalRock == true && e.def.building.mineableScatterCommonality <= 0f
                                     && !c.Fogged(map) && !c.CloseToEdge(map, 10);
-            bool Open(IntVec3 c) => c.Standable(map) && c.GetEdifice(map) == null && !c.CloseToEdge(map, 10) && !c.Roofed(map);
+            bool Open(IntVec3 c) => c.Standable(map) && c.GetEdifice(map) == null && c.GetFirstItem(map) == null && c.GetFirstPawn(map) == null
+                                    && !c.CloseToEdge(map, 10) && !c.Roofed(map);
             int spawned = 0;
             for (int lump = 0; lump < 30; lump++)
             {
