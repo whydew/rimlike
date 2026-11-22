@@ -205,6 +205,14 @@ namespace Roguelike
                 if (Widgets.ButtonText(skipRect, "Skip reward")) Skip();
                 GUI.color = Color.white;
             }
+            // Choosing the next node: the whole act can be looked over first.
+            else if (!leaving && cards.Count > 0 && cards[0].kind == RewardKind.Path)
+            {
+                var mapRect = new Rect(inRect.center.x - 90f, y0 + CardHeight + 44f, 180f, 38f);
+                GUI.color = new Color(1f, 1f, 1f, Style.EaseOutCubic((t - 0.6f) / 0.4f));
+                if (Widgets.ButtonText(mapRect, "View act map")) Dialog_RunMap.Toggle();
+                GUI.color = Color.white;
+            }
 
             if (leaving && !resolved && exit >= 1f)
             {
@@ -292,7 +300,7 @@ namespace Roguelike
             if (card.kind == RewardKind.Path)
             {
                 DrawPathBody(body, card.pathNode, kind, a);
-                TooltipHandler.TipRegion(r, text); // the full briefing
+                if (Mouse.IsOver(r)) NodeInfo.ForNode(card.pathNode).Show(); // the full briefing, in sections
             }
             else
             {
@@ -327,12 +335,22 @@ namespace Roguelike
             Style.ShadowLabel(new Rect(reward.x + 6f, reward.y + 15f, reward.width - 8f, 18f), node.RewardShort, new Color(1f, 0.95f, 0.82f, a));
 
             float y = body.y, bottom = reward.y - 4f;
-            // Description: at most two lines.
-            string desc = p.description;
+            // Description: two lines at most, one when the terrain line needs the room (the hover panel has it all).
+            string terrain = node.TerrainLine;
+            string desc = terrain != null ? p.description.Truncate(body.width) : p.description;
             float dh = Mathf.Min(Text.CalcHeight(desc, body.width), 30f);
             GUI.color = dim;
             Widgets.Label(new Rect(body.x, y, body.width, dh), desc);
-            y += dh + 6f;
+            y += dh + 4f;
+            // Where it is: biome, terrain, season and temperature.
+            if (terrain != null)
+            {
+                float th = Text.CalcHeight(terrain, body.width);
+                GUI.color = new Color(0.62f, 0.82f, 0.62f, a);
+                Widgets.Label(new Rect(body.x, y, body.width, th), terrain);
+                y += th + 4f;
+            }
+            y += 2f;
 
             // Leave room for the weather and danger lines below the objective.
             string weather = p.WeatherLine(node.Weather), danger = p.DangerLine;
@@ -389,6 +407,9 @@ namespace Roguelike
             var tint = GUI.color;
             switch (card.kind)
             {
+                case RewardKind.LevelUp:
+                    GUI.DrawTexture(art, PortraitsCache.Get(card.levelPawn, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
+                    break;
                 case RewardKind.Recruit:
                     GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
                     break;
@@ -438,8 +459,10 @@ namespace Roguelike
                     var unlocks = card.research.UnlockedDefs.Where(d => d is BuildableDef || d is RecipeDef).Select(d => d.label).Distinct().Take(4).ToList();
                     return "Completes this research right away." + (unlocks.Count > 0 ? "\nUnlocks: " + string.Join(", ", unlocks) + "." : "")
                            + "\n\n" + card.research.description.Split('\n')[0];
+                case RewardKind.LevelUp:
+                    return LevelUps.Short(card) + "\n\n" + LevelUps.Describe(card);
                 case RewardKind.Path:
-                    return card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
+                    return (card.pathNode.TerrainLine is { } terrain ? terrain + "\n" : "") + card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }
             return "";
         }

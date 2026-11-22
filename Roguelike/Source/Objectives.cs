@@ -11,11 +11,11 @@ namespace Roguelike
     /// Produce: items of a kind made on this node (current amount on the map minus what was there on arrival).
     /// Keep: items of a kind on hand. Build: finished buildings (optionally of a stuff category, e.g. stone).
     /// Bedrooms / DiningRoom: enclosed, roofed rooms with that role and at least minCells cells.
-    /// Shelter: human beds in enclosed, roofed rooms. NoDeaths: everyone who arrived is still alive.
+    /// Shelter: human beds in enclosed, roofed rooms. NoDeaths: everyone who arrived is still alive. Stay: days on the node.
     /// Any requirement can also ask for room quality (minImpressiveness, rooms only) or to be held for holdDays:
     /// the days it is met add up (pausing, not resetting, while it isn't), and once they reach holdDays it stays done.
     /// </summary>
-    public enum RequirementKind { Produce, Keep, Build, Bedrooms, DiningRoom, Shelter, NoDeaths }
+    public enum RequirementKind { Produce, Keep, Build, Bedrooms, DiningRoom, Shelter, NoDeaths, Stay }
 
     public class NodeRequirement
     {
@@ -47,6 +47,7 @@ namespace Roguelike
             RequirementKind.DiningRoom => $"a roofed dining room (at least {minCells} cells{Quality})",
             RequirementKind.Shelter => $"{Target(squad)} beds indoors",
             RequirementKind.NoDeaths => "nobody dies",
+            RequirementKind.Stay => $"stay {count} days",
             _ => "",
         } + HoldText + (holdDays > 0f ? " (the count pauses while it isn't met; once reached, it stays done)" : "");
 
@@ -60,6 +61,7 @@ namespace Roguelike
             RequirementKind.DiningRoom => $"Dining room ({minCells}+ cells{Quality})",
             RequirementKind.Shelter => $"{Target(squad)} beds indoors",
             RequirementKind.NoDeaths => "Nobody dies",
+            RequirementKind.Stay => $"Stay {count} days",
             _ => "",
         } + HoldText;
 
@@ -70,6 +72,7 @@ namespace Roguelike
         private string ShortCount(int squad, int have) => kind switch
         {
             RequirementKind.NoDeaths => have > 0 ? "no deaths" : "a squad member died",
+            RequirementKind.Stay => $"day {have}/{Target(squad)}",
             RequirementKind.DiningRoom => have > 0 ? "dining room" : "no dining room",
             RequirementKind.Bedrooms => $"{have}/{Target(squad)} bedrooms",
             RequirementKind.Shelter => $"{have}/{Target(squad)} beds indoors",
@@ -195,6 +198,8 @@ namespace Roguelike
                         .Count(b => b.def.building.bed_humanlike && b.GetRoom() is { ProperRoom: true, PsychologicallyOutdoors: false });
                 case RequirementKind.NoDeaths:
                     return c.entrySquad.All(p => p != null && !p.Dead) ? 1 : 0;
+                case RequirementKind.Stay:
+                    return (int)c.Days;
             }
             return 0;
         }

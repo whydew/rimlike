@@ -29,6 +29,9 @@ namespace Roguelike
             return Icons.TryGetValue(node.IsBoss ? "Boss" : node.preset.kind.ToString(), out var tex) ? tex : null;
         }
 
+        /// <summary>A kind's icon; null is the boss.</summary>
+        public static Texture2D ForKind(NodeKind? kind) => Icons.TryGetValue(kind?.ToString() ?? "Boss", out var tex) ? tex : null;
+
         public static bool Has(string name) => Icons.ContainsKey(name);
     }
 
@@ -43,6 +46,7 @@ namespace Roguelike
         private static readonly Color GraceC = new Color(0.3f, 0.55f, 0.38f);
         private static readonly Color WarnC = new Color(0.92f, 0.72f, 0.28f);
         private static readonly Color BadC = new Color(0.92f, 0.32f, 0.27f);
+        private static readonly Color StretchC = new Color(0.35f, 0.8f, 0.85f);
 
         private static int shownMap = -1;
         private static float shownProgress, shownWeather, completedAt = -1f, lastGain = -10f;
@@ -56,9 +60,11 @@ namespace Roguelike
             var node = run is { active: true } ? run.NodeAt(c.map.Tile) : null;
             float dt = Event.current.type == EventType.Repaint ? Mathf.Min(Time.unscaledDeltaTime, 0.05f) : 0f;
 
-            float progress = c.completed ? 1f : c.Progress;
+            // Staying for stretch goals: the bar tracks them, and the weather runs at full speed.
+            bool stretch = c.StretchOpen;
+            float progress = stretch ? c.StretchProgress : c.completed ? 1f : c.Progress;
             var cond = c.Condition;
-            float weather = cond == null || c.completed ? 0f
+            float weather = cond == null || c.completed && !stretch ? 0f
                 : c.InGrace ? Mathf.Clamp01((c.GraceDays - c.Days) / Mathf.Max(0.01f, c.GraceDays))
                 : Mathf.Clamp01(c.PaceFactor / Mathf.Max(1f, c.preset.maxPaceFactor));
             if (shownMap != c.map.uniqueID)
@@ -73,7 +79,7 @@ namespace Roguelike
             shownWeather = Mathf.Lerp(shownWeather, weather, 1f - Mathf.Exp(-6f * dt));
             if (c.completed && completedAt == -1f) completedAt = Style.Now; // -100 = already complete when first shown, no flash
 
-            bool behind = cond != null && !c.completed && !c.InGrace && c.PaceFactor > 1.05f;
+            bool behind = cond != null && (stretch || !c.completed && !c.InGrace && c.PaceFactor > 1.05f);
             var accent = c.failed ? BadC : c.completed ? Style.Gold : behind ? BadC : node?.IsBoss == true ? BadC : Style.Gold;
 
             // Panel: shadow, pulsing danger glow, gradient body, accent edge.
@@ -104,14 +110,21 @@ namespace Roguelike
             // Objective bar.
             Text.Font = GameFont.Tiny;
             var bar = new Rect(inner.x, inner.y + 24f, inner.width, 18f);
-            Bar(bar, shownProgress, c.failed ? BadC : c.completed ? Style.Gold : GoodC, Style.Now - lastGain < 0.6f);
-            Style.ShadowLabel(BarText(bar), c.failed ? "Failed" : c.completed ? "Complete: leave via the letter" : c.ProgressText, Color.white);
+            Bar(bar, shownProgress, c.failed ? BadC : stretch ? StretchC : c.completed ? Style.Gold : GoodC, Style.Now - lastGain < 0.6f);
+            string objective = c.failed ? "Failed" : stretch ? $"Stretch {c.StretchMet}/{c.preset.stretchGoals.Count}: {c.ProgressOf(c.NextStretch)}"
+                : c.completed ? "Complete: leave via the letter" : c.ProgressText;
+            Style.ShadowLabel(BarText(bar), objective, Color.white);
 
             // Weather bar: intensity and pace.
             var wbar = new Rect(inner.x, inner.y + 46f, inner.width, 18f);
             if (cond == null)
             {
                 Style.ShadowLabel(BarText(wbar), "No weather modifier.", new Color(1f, 1f, 1f, 0.7f));
+            }
+            else if (stretch)
+            {
+                Bar(wbar, shownWeather, BadC, false);
+                Style.ShadowLabel(BarText(wbar), $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)}, full speed", Color.white);
             }
             else if (c.completed)
             {
@@ -131,9 +144,11 @@ namespace Roguelike
                 Style.ShadowLabel(BarText(wbar), $"{cond.def.LabelCap}: {cond.IntensityText(cond.intensity)}, x{pace:0.00} ({state})", Color.white);
             }
 
-            Style.ShadowLabel(new Rect(inner.x, inner.y + 70f, inner.width, 18f),
-                $"Day {c.Days:0.0}" + (c.nextPatrolTick > 0 ? $"  ·  next patrol in {(c.nextPatrolTick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}" : ""),
-                new Color(1f, 1f, 1f, 0.6f));
+            // Day, and the next raid: when, from where, how many. Red once it's under a day away.
+            var raid = c.NextRaid;
+            bool soon = raid != null && raid.tick - Find.TickManager.TicksGame < GenDate.TicksPerDay;
+            Style.ShadowLabel(new Rect(inner.x, inner.y + 70f, inner.width, 18f), $"Day {c.Days:0.0}" + (c.RaidText is { } rt ? "  ·  " + rt : ""),
+                soon ? new Color(1f, 0.55f, 0.5f, 0.8f + 0.2f * Style.Pulse(4f)) : new Color(1f, 1f, 1f, 0.6f));
 
             // Completion flash and a sheen across the whole panel.
             if (completedAt > 0f)
@@ -148,7 +163,17 @@ namespace Roguelike
 
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
-            TooltipHandler.TipRegion(r, () => new Alert_RoguelikeNode().GetExplanation(), 0x52_4C_4E_44);
+            if (Mouse.IsOver(r)) NodeInfo.ForMap(c).Show();
+
+            // The act map, a click away while building.
+            if (node != null)
+            {
+                Text.Font = GameFont.Tiny;
+                if (Style.Button(new Rect(r.xMax - 96f, r.yMax + 6f, 96f, 24f), "Act map", Style.Gold)) Dialog_RunMap.Toggle();
+                // Staying for stretch goals: leave whenever you like.
+                if (stretch && run.pendingPickNodeId < 0 && Style.Button(new Rect(r.xMax - 202f, r.yMax + 6f, 100f, 24f), "Leave node", BadC)) run.RequestNextPick(node);
+                Text.Font = GameFont.Small;
+            }
         }
 
         private static Rect BarText(Rect bar)

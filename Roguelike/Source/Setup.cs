@@ -255,8 +255,8 @@ namespace Roguelike
     }
 
     /// <summary>
-    /// Pick the first node: the starting row of act 1 as path cards (objective, weather, reward), with the planet
-    /// behind. Replaces vanilla's landing-site page during a run.
+    /// Pick the first node: the starting row of act 1 as path cards (objective, terrain, weather, reward). Replaces
+    /// vanilla's landing-site page during a run; the planet stays hidden.
     /// </summary>
     public class Page_RoguelikeLanding : RoguelikePage
     {
@@ -273,7 +273,6 @@ namespace Roguelike
         protected override string Subheading => "Your first node. The rest of the run branches out from here.";
         protected override string NextLabel => "Land here";
         protected override bool NextReady => selected >= 0;
-        protected override float BackdropAlpha => 0.6f;
 
         public override void PreOpen()
         {
@@ -282,22 +281,6 @@ namespace Roguelike
             cards = starts.Select(n => new RewardCard { kind = RewardKind.Path, pathNode = n }).ToList();
             hover = new float[starts.Count];
             hoverStart = new float[starts.Count];
-            // Show the planet behind the cards, centred on the starting row.
-            Find.World.renderer.wantedMode = RimWorld.Planet.WorldRenderMode.Planet;
-            Find.WorldInterface.Reset();
-        }
-
-        public override void PostOpen()
-        {
-            base.PostOpen();
-            var middle = starts.Skip(starts.Count / 2).FirstOrDefault();
-            if (middle != null) Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(middle.tile));
-        }
-
-        public override void PostClose()
-        {
-            base.PostClose();
-            Find.World.renderer.wantedMode = RimWorld.Planet.WorldRenderMode.None;
         }
 
         protected override void DrawContent(Rect area)

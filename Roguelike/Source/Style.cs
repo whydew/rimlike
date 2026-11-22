@@ -18,6 +18,9 @@ namespace Roguelike
         public static readonly Texture2D Sheen = SheenBand(64);
         public static readonly Texture2D BannerFade = HorizontalFade(64);
         public static readonly Texture2D White = SolidColorMaterials.NewSolidColorTexture(Color.white);
+        /// <summary>An anti-aliased filled circle and a ring, for map nodes.</summary>
+        public static readonly Texture2D Disc = Circle(64, 0f);
+        public static readonly Texture2D Ring = Circle(64, 0.16f);
 
         public static readonly Color Gold = new Color(0.93f, 0.78f, 0.42f);
         public static readonly Color Parchment = new Color(0.92f, 0.89f, 0.82f);
@@ -220,6 +223,23 @@ namespace Roguelike
                 float d = Mathf.Clamp01(Mathf.Sqrt((x - half) * (x - half) + (y - half) * (y - half)) / half);
                 float a = Mathf.Pow(1f - d, falloff);
                 if (invert) a = Mathf.Clamp01(Mathf.Pow(d, 1f / falloff));
+                t.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+            t.Apply();
+            return t;
+        }
+
+        /// <summary>A circle filling the texture; with <paramref name="ring"/> > 0, only an outer band that thick (as a fraction of the radius).</summary>
+        private static Texture2D Circle(int size, float ring)
+        {
+            var t = NewTex(size, size);
+            float half = size / 2f, edge = 1.5f / half;
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Mathf.Sqrt((x + 0.5f - half) * (x + 0.5f - half) + (y + 0.5f - half) * (y + 0.5f - half)) / half;
+                float a = Mathf.Clamp01((1f - d) / edge);
+                if (ring > 0f) a *= Mathf.Clamp01((d - (1f - ring)) / edge);
                 t.SetPixel(x, y, new Color(1f, 1f, 1f, a));
             }
             t.Apply();

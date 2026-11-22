@@ -15,6 +15,7 @@ namespace Roguelike
         public static WorldObjectDef Roguelike_Node;
         public static WorldObjectDef Roguelike_RunNode;
         public static LetterDef Roguelike_NodeComplete;
+        public static HediffDef Roguelike_Wear;
 
         static RoguelikeDefOf() => DefOfHelper.EnsureInitializedInCtor(typeof(RoguelikeDefOf));
     }
@@ -57,6 +58,11 @@ namespace Roguelike
         /// <summary>Base-building objective: every requirement must be met, after at least minDays on the node.</summary>
         public List<NodeRequirement> requirements = new List<NodeRequirement>();
         public float minDays;
+        /// <summary>
+        /// Optional goals on top of the objective. Each one met levels up a pawn. Once the objective is done the node
+        /// stays open for them, with the weather worsening at full speed, until the squad leaves.
+        /// </summary>
+        public List<NodeRequirement> stretchGoals = new List<NodeRequirement>();
         /// <summary>Mineable resources the objective needs (e.g. components): the node map gets enough ore to mine them.</summary>
         public List<ThingDefCountClass> ensureMineable = new List<ThingDefCountClass>();
 
@@ -157,8 +163,9 @@ namespace Roguelike
             else lines.Add(ObjectiveTextFor(squad).CapitalizeFirst());
             if (kind is NodeKind.CombatAlerted or NodeKind.Elite) lines.Add("The enemy attacks at once");
             if (kind == NodeKind.CombatUnaware) lines.Add("The camp hasn't seen you: scout, then strike");
-            if (patrolIntervalDays > 0f) lines.Add($"Patrols raid about every {patrolIntervalDays:0.#} days");
+            if (patrolIntervalDays > 0f) lines.Add($"Raids about every {patrolIntervalDays:0.#} days, announced ahead");
             if (reinforcementDays > 0f) lines.Add($"Reinforcements arrive on day {reinforcementDays:0.#}");
+            if (stretchGoals.Count > 0) lines.Add($"+{stretchGoals.Count} stretch goals: each levels up a pawn");
             return lines;
         }
 
@@ -197,8 +204,11 @@ namespace Roguelike
             if (NeedsText != null) sb.Append(" " + NeedsText);
             if (kind is NodeKind.CombatAlerted or NodeKind.Elite) sb.Append(" The enemy knows you're here and attacks at once.");
             if (kind == NodeKind.CombatUnaware) sb.Append(" The enemy camp hasn't spotted you yet: scout and prepare, then strike.");
-            if (patrolIntervalDays > 0f) sb.Append($" Enemy patrols raid about every {patrolIntervalDays:0.#} days.");
+            if (patrolIntervalDays > 0f) sb.Append($" Raiders attack about every {patrolIntervalDays:0.#} days; the panel shows when, from where and how many.");
             if (reinforcementDays > 0f) sb.Append($" Enemy reinforcements arrive on day {reinforcementDays:0.#}.");
+            if (stretchGoals.Count > 0)
+                sb.Append("\n\nStretch goals (optional; each one met levels up a pawn): " + string.Join("; ", stretchGoals.Select(r => r.Describe(squad))) +
+                          ". Once the objective is done you can stay for them, but the weather worsens at full speed until you leave.");
             if (modifier != null)
             {
                 string perDay = PerDayText(modifier);
@@ -325,9 +335,12 @@ namespace Roguelike
         public Faction enemyFaction;
         public int initialEnemies;
         public Pawn escort;
-        public int nextPatrolTick = -1;
-        public int reinforcementTick = -1;
+        /// <summary>The next patrol raid and the one-off reinforcements, rolled ahead so the HUD can announce them.</summary>
+        public RaidPlan patrol, reinforcements;
         public int raidsLaunched;
+        /// <summary>Stretch goals met so far, and days held for those with holdDays (by index into preset.stretchGoals).</summary>
+        public List<bool> stretchDone = new List<bool>();
+        public List<float> stretchHeld = new List<float>();
 
         public MapComponent_RoguelikeNode(Map map) : base(map) { }
 
@@ -362,7 +375,47 @@ namespace Roguelike
         private float Held(NodeRequirement r)
         {
             int i = preset.requirements.IndexOf(r);
-            return i >= 0 && i < heldDays.Count ? heldDays[i] : 0f;
+            if (i >= 0) return i < heldDays.Count ? heldDays[i] : 0f;
+            i = preset.stretchGoals.IndexOf(r);
+            return i >= 0 && i < stretchHeld.Count ? stretchHeld[i] : 0f;
+        }
+
+        public int StretchMet => stretchDone.Count(d => d);
+
+        public bool StretchDone(int i) => i < stretchDone.Count && stretchDone[i];
+
+        /// <summary>The objective is done and stretch goals are left: the node stays open, the clock keeps running.</summary>
+        public bool StretchOpen => completed && !failed && StretchMet < preset.stretchGoals.Count;
+
+        /// <summary>The first stretch goal not met yet, for the HUD.</summary>
+        public NodeRequirement NextStretch => preset.stretchGoals.Where((r, i) => !StretchDone(i)).FirstOrDefault();
+
+        /// <summary>A requirement's (or stretch goal's) progress in a few words, e.g. "40/60 stony wall".</summary>
+        public string ProgressOf(NodeRequirement r) => r.Short(squad, Have(r), Held(r));
+
+        /// <summary>0..1 across all stretch goals: met ones count fully, the rest by progress.</summary>
+        public float StretchProgress => preset.stretchGoals.Count == 0 ? 1f
+            : preset.stretchGoals.Select((r, i) => StretchDone(i) ? 1f : RequirementProgress(r)).Average();
+
+        /// <summary>Marks newly met stretch goals; each one queues a level-up. Once all are met the node offers the way on.</summary>
+        private void CheckStretch()
+        {
+            while (stretchDone.Count < preset.stretchGoals.Count) stretchDone.Add(false);
+            bool any = false;
+            for (int i = 0; i < preset.stretchGoals.Count; i++)
+            {
+                var r = preset.stretchGoals[i];
+                if (stretchDone[i] || !Met(r)) continue;
+                stretchDone[i] = true;
+                any = true;
+                if (Run != null) Run.pendingLevelUps++;
+                Messages.Message($"Stretch goal met: {r.Card(squad)}. A squad member levels up.", MessageTypeDefOf.PositiveEvent);
+            }
+            if (any && completed && !StretchOpen && Run?.NodeAt(map.Tile) is { } node)
+            {
+                Messages.Message("Every stretch goal is met. Time to move on.", MessageTypeDefOf.PositiveEvent);
+                Run.RequestNextPick(node);
+            }
         }
 
         /// <summary>Met now, or for a held requirement, met for long enough in total.</summary>
@@ -384,6 +437,12 @@ namespace Roguelike
             {
                 var r = preset.requirements[i];
                 if (r.holdDays > 0f && heldDays[i] < r.holdDays && Have(r) >= r.Target(squad)) heldDays[i] += days;
+            }
+            while (stretchHeld.Count < preset.stretchGoals.Count) stretchHeld.Add(0f);
+            for (int i = 0; i < preset.stretchGoals.Count; i++)
+            {
+                var r = preset.stretchGoals[i];
+                if (r.holdDays > 0f && stretchHeld[i] < r.holdDays && Have(r) >= r.Target(squad)) stretchHeld[i] += days;
             }
         }
 
@@ -445,10 +504,11 @@ namespace Roguelike
 
         public float ExpectedProgress => Mathf.Clamp01(Days / preset.targetDays);
 
-        /// <summary>Above 1 when behind pace (worsens faster), below 1 when ahead.</summary>
-        public float PaceFactor =>
-            Mathf.Clamp(1f + (ExpectedProgress - Progress) * preset.paceSensitivity, preset.minPaceFactor,
-                Mathf.Max(1f, 1f + (preset.maxPaceFactor - 1f) * (Run?.MaxPaceFactorFactor ?? 1f)));
+        private float MaxPaceFactor => Mathf.Max(1f, 1f + (preset.maxPaceFactor - 1f) * (Run?.MaxPaceFactorFactor ?? 1f));
+
+        /// <summary>Above 1 when behind pace (worsens faster), below 1 when ahead. Staying on after the objective: full speed.</summary>
+        public float PaceFactor => completed ? MaxPaceFactor
+            : Mathf.Clamp(1f + (ExpectedProgress - Progress) * preset.paceSensitivity, preset.minPaceFactor, MaxPaceFactor);
 
         public float CurrentRatePerDay => ratePerDay * (Run?.WeatherRateFactor ?? 1f) * PaceFactor;
 
@@ -468,9 +528,11 @@ namespace Roguelike
             entrySquad = map.mapPawns.FreeColonists.ToList();
             squad = Mathf.Clamp(entrySquad.Count, 1, 5);
             baselines.Clear();
-            foreach (var r in p.requirements.Where(r => r.kind == RequirementKind.Produce && r.thing != null))
+            foreach (var r in p.requirements.Concat(p.stretchGoals).Where(r => r.kind == RequirementKind.Produce && r.thing != null))
                 baselines[r.thing] = RequirementUtility.CountOnMap(map, r.thing);
             heldDays = p.requirements.Select(_ => 0f).ToList();
+            stretchHeld = p.stretchGoals.Select(_ => 0f).ToList();
+            stretchDone = p.stretchGoals.Select(_ => false).ToList();
             foreach (var res in p.ensureMineable) RequirementUtility.EnsureMineable(map, res.thingDef, res.count);
 
             if (p.assault && map.Parent is Settlement { Faction: not null } enemyBase && !enemyBase.Faction.IsPlayer)
@@ -491,48 +553,107 @@ namespace Roguelike
                     SpawnEscort();
                     break;
             }
-            if (p.patrolIntervalDays > 0f && enemyFaction == null) PickEnemyFaction(); // expeditions with patrols: someone tests the defenses
-            if (p.patrolIntervalDays > 0f) nextPatrolTick = startTick + (int)(p.patrolIntervalDays * GenDate.TicksPerDay);
-            if (p.reinforcementDays > 0f) reinforcementTick = startTick + (int)(p.reinforcementDays * GenDate.TicksPerDay);
+            if (p.patrolIntervalDays > 0f && enemyFaction == null) PickEnemyFaction(); // expeditions with raids: someone tests the defenses
+            if (p.patrolIntervalDays > 0f) patrol = PlanRaid(startTick + (int)(p.patrolIntervalDays * GenDate.TicksPerDay), PatrolFactor, "Raid");
+            if (p.reinforcementDays > 0f) reinforcements = PlanRaid(startTick + (int)(p.reinforcementDays * GenDate.TicksPerDay), 1f, "Enemy reinforcements");
             initialEnemies = Mathf.Max(initialEnemies, EnemiesLeft);
         }
 
+        private const float PatrolFactor = 0.5f;
+
         public override void MapComponentTick()
         {
-            if (!Active || completed || failed || Find.TickManager.TicksGame % UpdateInterval != 0) return;
+            if (!Active || failed || Find.TickManager.TicksGame % UpdateInterval != 0) return;
+            // After the objective the node runs on only while stretch goals are left.
+            if (completed && !StretchOpen) return;
 
-            if (preset.objective == ObjectiveKind.Escort && !EscortAlive)
+            if (!completed)
             {
-                Fail("The refugee you were escorting is gone.");
-                return;
-            }
-            if (preset.requirements.Any(r => r.kind == RequirementKind.NoDeaths) && entrySquad.Any(p => p == null || p.Dead))
-            {
-                Fail("A squad member died, and this node allowed no deaths.");
-                return;
+                if (preset.objective == ObjectiveKind.Escort && !EscortAlive)
+                {
+                    Fail("The refugee you were escorting is gone.");
+                    return;
+                }
+                if (preset.requirements.Any(r => r.kind == RequirementKind.NoDeaths) && entrySquad.Any(p => p == null || p.Dead))
+                {
+                    Fail("A squad member died, and this node allowed no deaths.");
+                    return;
+                }
             }
             initialEnemies = Mathf.Max(initialEnemies, EnemiesLeft);
             if (preset.objective == ObjectiveKind.Requirements) TickHolds(UpdateInterval / (float)GenDate.TicksPerDay);
-            if (ObjectiveMet)
+            if (preset.stretchGoals.Count > 0) CheckStretch();
+            if (!completed && ObjectiveMet)
             {
                 Complete();
                 return;
             }
 
             int now = Find.TickManager.TicksGame;
-            if (nextPatrolTick > 0 && now >= nextPatrolTick)
+            if (patrol != null && now >= patrol.tick)
             {
-                SpawnRaid(0.5f, "Enemy patrol");
-                nextPatrolTick = now + (int)(preset.patrolIntervalDays * GenDate.TicksPerDay);
+                SpawnRaid(patrol);
+                patrol = PlanRaid(now + (int)(preset.patrolIntervalDays * GenDate.TicksPerDay), PatrolFactor, "Raid");
             }
-            if (reinforcementTick > 0 && now >= reinforcementTick)
+            if (reinforcements != null && now >= reinforcements.tick)
             {
-                SpawnRaid(1f, "Enemy reinforcements");
-                reinforcementTick = -1;
+                SpawnRaid(reinforcements);
+                reinforcements = null;
             }
 
             AdvanceThreat(UpdateInterval / (float)GenDate.TicksPerDay);
             Condition?.ApplyEffects(map);
+        }
+
+        /// <summary>The next announced raid, if any.</summary>
+        public RaidPlan NextRaid => patrol == null ? reinforcements : reinforcements == null || patrol.tick <= reinforcements.tick ? patrol : reinforcements;
+
+        /// <summary>
+        /// Rolls a raid ahead of time: where it enters, how strong it is and roughly how many come, so the HUD can
+        /// announce it and the squad can prepare. The raid then arrives exactly as announced.
+        /// </summary>
+        public RaidPlan PlanRaid(int tick, float factor, string label)
+        {
+            var plan = new RaidPlan { tick = tick, label = label, points = RaidPoints(factor) };
+            if (enemyFaction != null)
+                plan.points = Mathf.Max(plan.points, enemyFaction.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) * 1.1f);
+            if (RCellFinder.TryFindRandomPawnEntryCell(out var cell, map, CellFinder.EdgeRoadChance_Hostile)) plan.cell = cell;
+            if (enemyFaction != null)
+                plan.count = PawnGroupMakerUtility.GeneratePawnKindsExample(new PawnGroupMakerParms
+                {
+                    groupKind = PawnGroupKindDefOf.Combat, tile = map.Tile, faction = enemyFaction, points = plan.points,
+                }).Count();
+            return plan;
+        }
+
+        /// <summary>"north", "east"...: the side of the map a cell is on.</summary>
+        public string SideOf(IntVec3 cell)
+        {
+            var d = cell - map.Center;
+            float angle = Mathf.Atan2(d.z, d.x) * Mathf.Rad2Deg;
+            return angle >= 45f && angle < 135f ? "north" : angle >= -45f && angle < 45f ? "east" : angle >= -135f && angle < -45f ? "south" : "west";
+        }
+
+        /// <summary>The next raid in a few words for the HUD: "Raid in 2 days from the north, ~5".</summary>
+        public string RaidText
+        {
+            get
+            {
+                var raid = NextRaid;
+                if (raid == null) return null;
+                string from = raid.cell.IsValid ? $" from the {SideOf(raid.cell)}" : "";
+                string size = raid.count > 0 ? $", ~{raid.count}" : "";
+                return $"{raid.label} in {Mathf.Max(0, raid.tick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}{from}{size}";
+            }
+        }
+
+        /// <summary>A pulsing ring where the next raid will walk in, once it's less than two days away.</summary>
+        public override void MapComponentUpdate()
+        {
+            if (!Active || map != Find.CurrentMap || WorldRendererUtility.WorldSelected) return;
+            var raid = NextRaid;
+            if (raid == null || !raid.cell.IsValid || raid.tick - Find.TickManager.TicksGame > 2 * GenDate.TicksPerDay) return;
+            GenDraw.DrawRadiusRing(raid.cell, 4.9f + 1.5f * Style.Pulse(3f), new Color(1f, 0.3f, 0.25f));
         }
 
         /// <summary>Moves the weather by <paramref name="days"/> worth of change at the current pace.</summary>
@@ -557,17 +678,21 @@ namespace Roguelike
 
         private const float MinRaidPoints = 120f;
 
+        /// <summary>An announced raid arrives: its planned strength, from its planned edge.</summary>
+        public void SpawnRaid(RaidPlan plan) => SpawnRaid(0f, plan.label, plan);
+
         /// <summary>A raid that walks in from the edge and attacks at once.</summary>
-        public void SpawnRaid(float factor, string label = null)
+        public void SpawnRaid(float factor, string label = null, RaidPlan plan = null)
         {
             if (enemyFaction == null) return;
             var parms = new IncidentParms
             {
                 target = map,
                 faction = enemyFaction,
-                points = RaidPoints(factor),
+                points = plan?.points ?? RaidPoints(factor),
                 raidStrategy = RaidStrategyDefOf.ImmediateAttack,
                 raidArrivalMode = PawnsArrivalModeDefOf.EdgeWalkIn,
+                spawnCenter = plan?.cell ?? IntVec3.Invalid,
                 forced = true,
             };
             if (label != null) parms.customLetterLabel = label;
@@ -673,13 +798,13 @@ namespace Roguelike
             var run = WorldComponent_RoguelikeRun.Get;
             var runNode = run is { active: true } ? run.NodeAt(map.Tile) : null;
             run?.NotifyNodeCompleted(map.Tile);
-            string nextStep = runNode == null || runNode.IsBoss && runNode.act >= WorldComponent_RoguelikeRun.ActsPerRun
-                ? ""
-                : "\n\nIf you closed the node choice, use Leave node now to bring it back.";
-            var letter = (Letter_NodeComplete)LetterMaker.MakeLetter(
-                "Node complete",
-                "You've met this node's objective.\n\nChoose your next node, then pack what your pawns and pack animals can carry. Everything else stays behind." + nextStep,
-                RoguelikeDefOf.Roguelike_NodeComplete);
+            bool lastBoss = runNode == null || runNode.IsBoss && runNode.act >= WorldComponent_RoguelikeRun.ActsPerRun;
+            string text = StretchOpen
+                ? $"You've met this node's objective.\n\nYou can stay for the stretch goals ({StretchMet}/{preset.stretchGoals.Count} met; each levels up a pawn), " +
+                  "but the weather now worsens at full speed. Use Leave node now (or the button under the node panel) when you're ready to go."
+                : "You've met this node's objective.\n\nChoose your next node, then pack what your pawns and pack animals can carry. Everything else stays behind."
+                  + (lastBoss ? "" : "\n\nIf you closed the node choice, use Leave node now to bring it back.");
+            var letter = (Letter_NodeComplete)LetterMaker.MakeLetter("Node complete", text, RoguelikeDefOf.Roguelike_NodeComplete);
             letter.map = map;
             Find.LetterStack.ReceiveLetter(letter);
         }
@@ -699,9 +824,13 @@ namespace Roguelike
             Scribe_References.Look(ref enemyFaction, "enemyFaction");
             Scribe_Values.Look(ref initialEnemies, "initialEnemies");
             Scribe_References.Look(ref escort, "escort");
-            Scribe_Values.Look(ref nextPatrolTick, "nextPatrolTick", -1);
-            Scribe_Values.Look(ref reinforcementTick, "reinforcementTick", -1);
+            Scribe_Deep.Look(ref patrol, "patrol");
+            Scribe_Deep.Look(ref reinforcements, "reinforcements");
             Scribe_Values.Look(ref raidsLaunched, "raidsLaunched");
+            Scribe_Collections.Look(ref stretchDone, "stretchDone", LookMode.Value);
+            Scribe_Collections.Look(ref stretchHeld, "stretchHeld", LookMode.Value);
+            stretchDone ??= new List<bool>();
+            stretchHeld ??= new List<float>();
             Scribe_Defs.Look(ref modifier, "modifier");
             Scribe_Values.Look(ref ratePerDay, "ratePerDay");
             Scribe_Values.Look(ref graceDays, "graceDays");
@@ -712,6 +841,40 @@ namespace Roguelike
             heldDays ??= new List<float>();
             entrySquad ??= new List<Pawn>();
             baselines ??= new Dictionary<ThingDef, int>();
+        }
+    }
+
+    /// <summary>A raid rolled ahead of time: when, from which edge cell, how strong and about how many raiders.</summary>
+    public class RaidPlan : IExposable
+    {
+        public int tick = -1;
+        public IntVec3 cell = IntVec3.Invalid;
+        public float points;
+        public int count;
+        public string label;
+
+        public void ExposeData()
+        {
+            Scribe_Values.Look(ref tick, "tick", -1);
+            Scribe_Values.Look(ref cell, "cell", IntVec3.Invalid);
+            Scribe_Values.Look(ref points, "points");
+            Scribe_Values.Look(ref count, "count");
+            Scribe_Values.Look(ref label, "label");
+        }
+    }
+
+    /// <summary>
+    /// On a node map during a run, raids come only from the node's own announced schedule: the storyteller's surprise
+    /// raids are held back. Forced raids (the node's own, quests, debug) still fire.
+    /// </summary>
+    [HarmonyLib.HarmonyPatch(typeof(IncidentWorker), nameof(IncidentWorker.CanFireNow))]
+    public static class Patch_IncidentWorker_NoSurpriseRaids
+    {
+        public static void Postfix(IncidentWorker __instance, IncidentParms parms, ref bool __result)
+        {
+            if (!__result || parms.forced || __instance is not IncidentWorker_RaidEnemy || parms.target is not Map map) return;
+            if (WorldComponent_RoguelikeRun.Get is not { active: true, RunOver: false }) return;
+            if (map.GetComponent<MapComponent_RoguelikeNode>() is { Active: true }) __result = false;
         }
     }
 
@@ -791,8 +954,13 @@ namespace Roguelike
             sb.AppendLine();
             sb.AppendLine($"Objective: {c.preset.ObjectiveText}.");
             sb.AppendLine($"Progress: {c.ProgressText} ({c.Progress:P0}).");
-            if (c.nextPatrolTick > 0) sb.AppendLine($"Next patrol in {(c.nextPatrolTick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}.");
-            if (c.reinforcementTick > 0) sb.AppendLine($"Reinforcements in {(c.reinforcementTick - Find.TickManager.TicksGame).ToStringTicksToPeriod()}.");
+            if (c.preset.stretchGoals.Count > 0)
+            {
+                sb.AppendLine($"Stretch goals ({c.StretchMet}/{c.preset.stretchGoals.Count}; each levels up a pawn):");
+                for (int i = 0; i < c.preset.stretchGoals.Count; i++)
+                    sb.AppendLine($"  • {c.preset.stretchGoals[i].Card(c.squad)}: {(c.StretchDone(i) ? "met" : c.ProgressOf(c.preset.stretchGoals[i]))}");
+            }
+            if (c.RaidText is { } raid) sb.AppendLine(raid + ". A red ring marks where it walks in once it's close.");
             var cond = c.Condition;
             if (cond != null && !c.completed)
             {

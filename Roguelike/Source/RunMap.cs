@@ -55,6 +55,25 @@ namespace Roguelike
 
         public GameConditionDef Weather => preset.randomModifier ? modifier : preset.condition;
 
+        /// <summary>
+        /// Where the node's map is, in a few words: biome, hills, coast, then the season and temperature there now
+        /// (before the game starts, the yearly average instead). Null for map-less nodes.
+        /// </summary>
+        public string TerrainLine
+        {
+            get
+            {
+                if (preset?.HasMap != true || !tile.Valid || Find.WorldGrid == null) return null;
+                var t = Find.WorldGrid[tile];
+                var parts = new List<string> { t.PrimaryBiome.LabelCap, t.hilliness.GetLabelCap() };
+                if (Find.World.CoastDirectionAt(tile).IsValid) parts.Add("Coast");
+                parts.Add(Current.ProgramState == ProgramState.Playing
+                    ? $"{GenLocalDate.Season(tile).LabelCap()} {GenTemperature.GetTemperatureFromSeasonAtTile(Find.TickManager.TicksAbs, tile).ToStringTemperature("F0")}"
+                    : $"avg {t.temperature.ToStringTemperature("F0")}");
+                return string.Join(" · ", parts);
+            }
+        }
+
         public string RewardText => reward switch
         {
             RunRewardKind.Recruits => $"Reward: choose 1 of {Choices} recruits.",
@@ -89,11 +108,11 @@ namespace Roguelike
     {
         /// <summary>Nodes per row, start row first and boss row last (~15 nodes).</summary>
         private static readonly int[] RowSizes = { 3, 3, 3, 3, 2, 1 };
-        /// <summary>Spacing between rows and columns, in world tiles (shrunk automatically on small planets).</summary>
-        private const float RowSpacingTiles = 16f;
-        private const float ColSpacingTiles = 13f;
-        private const float MinNodeGapTiles = 5f;
-        private const float SearchRadiusTiles = 7f;
+        public static int RowCount => RowSizes.Length;
+        /// <summary>Node tiles stay this far apart, so enemy bases and node maps never sit side by side.</summary>
+        private const float MinNodeGapTiles = 3f;
+        /// <summary>The first landing only uses the friendlier biomes (vanilla's settlement weight at least this).</summary>
+        private const float LandingBiomeWeight = 0.5f;
 
         public bool active;
         public bool runWon;
@@ -107,6 +126,8 @@ namespace Roguelike
         public int pointsEarned;
         /// <summary>Cleared node whose "choose your next node" screen is still open or due (reopened after loading).</summary>
         public int pendingPickNodeId = -1;
+        /// <summary>Level-ups earned (stretch goals) whose pick screen hasn't been shown yet.</summary>
+        public int pendingLevelUps;
         /// <summary>Current act, 1..ActsPerRun. Beating the last act's boss wins the run.</summary>
         public int act = 1;
         /// <summary>Ascension level chosen for this run (0 = none).</summary>
@@ -167,7 +188,7 @@ namespace Roguelike
                     MetaProgress.Award(1);
                 }
                 pendingRewardNodeId = -1;
-                RequestNextPick(node);
+                if (!StaysForStretch(node)) RequestNextPick(node);
             }));
         }
 
@@ -351,61 +372,136 @@ namespace Roguelike
                 act = node.act + 1;
                 Find.LetterStack.ReceiveLetter($"Act {act} of {ActsPerRun}", "The boss is beaten. The next act lies ahead, harder than the last.", LetterDefOf.PositiveEvent);
             }
+            if (node.preset.HasMap) Wear.AddForNode(Current.Game.FindMap(tile));
             if (node.reward != RunRewardKind.None) OfferReward(node, Current.Game.FindMap(tile));
-            else RequestNextPick(node);
+            else if (!StaysForStretch(node)) RequestNextPick(node);
+        }
+
+        /// <summary>The node's objective is done but stretch goals are left: the squad stays until it chooses to leave.</summary>
+        private static bool StaysForStretch(RunNode node) =>
+            Current.Game.FindMap(node.tile)?.GetComponent<MapComponent_RoguelikeNode>() is { StretchOpen: true };
+
+        /// <summary>One level-up: pick 1 of a few upgrades, each for a squad member.</summary>
+        private void OpenLevelUp()
+        {
+            var cards = LevelUps.Generate(RewardUtility.ChoiceCount(this));
+            if (cards.Count == 0)
+            {
+                pendingLevelUps = 0;
+                return;
+            }
+            Find.WindowStack.Add(new Dialog_RewardPick(cards, "Stretch goal met: one of your squad grows", card =>
+            {
+                pendingLevelUps = Mathf.Max(0, pendingLevelUps - 1);
+                if (card != null) RewardUtility.Apply(card, null);
+            }, allowSkip: false, title: "Level up"));
         }
 
         // ---------- Generation ----------
 
         /// <summary>
-        /// Lays out the whole run on this world after world generation: all acts at once, spread across the planet,
-        /// each act starting near the previous act's boss. NPC settlements are cleared away; elite and boss nodes
-        /// become hostile faction bases instead.
+        /// Lays out the whole run after world generation: all acts at once as rows of nodes, shown on the flat act map
+        /// (<see cref="Dialog_RunMap"/>). The planet is hidden storage: each node gets a random tile anywhere on it, for a
+        /// random biome, season and terrain. NPC settlements are cleared away; elite and boss nodes become hostile
+        /// faction bases on their tiles instead.
         /// </summary>
         public bool GenerateAct()
         {
             RemoveFactionSettlements();
-            Vector3[] centers = null;
-            // Try the full spacing first, then tighter layouts for small planets.
-            foreach (float scale in new[] { 1f, 0.75f, 0.55f, 0.4f })
+            var byBiome = TilesByBiome();
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                for (int attempt = 0; attempt < 6; attempt++)
-                {
-                    var all = new List<RunNode>();
-                    var near = PlanetTile.Invalid;
-                    bool ok = true;
-                    for (int a = 1; a <= ActsPerRun && ok; a++)
-                    {
-                        var actNodes = TryLayoutAct(a, near, all, scale, ref centers);
-                        if (actNodes == null) { ok = false; break; }
-                        all.AddRange(actNodes);
-                        near = actNodes.Last().tile;
-                    }
-                    if (!ok) continue;
+                var all = new List<RunNode>();
+                for (int a = 1; a <= ActsPerRun; a++) all.AddRange(LayoutAct(a, all.Count));
+                if (!AssignTiles(all, byBiome)) continue;
 
-                    foreach (var old in Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().ToList()) old.Destroy();
-                    nodes = all;
-                    act = 1;
-                    for (int a = 1; a <= ActsPerRun; a++) ConnectRows(a);
-                    // Each act's boss leads to the next act's starting nodes.
-                    for (int a = 1; a < ActsPerRun; a++)
-                        Row(a, RowSizes.Length - 1).First().next.AddRange(Row(a + 1, 0).Select(n => n.id));
-                    AssignPresets();
-                    PlaceEnemyBases();
-                    foreach (var n in Row(1, 0)) n.state = RunNodeState.Available;
-                    foreach (var n in nodes)
-                    {
-                        var marker = (RunNodeMarker)WorldObjectMaker.MakeWorldObject(RoguelikeDefOf.Roguelike_RunNode);
-                        marker.Tile = n.tile;
-                        marker.nodeId = n.id;
-                        Find.WorldObjects.Add(marker);
-                    }
-                    active = true;
-                    return true;
+                foreach (var old in Find.WorldObjects.AllWorldObjects.OfType<RunNodeMarker>().ToList()) old.Destroy();
+                nodes = all;
+                act = 1;
+                for (int a = 1; a <= ActsPerRun; a++) ConnectRows(a);
+                // Each act's boss leads to the next act's starting nodes.
+                for (int a = 1; a < ActsPerRun; a++)
+                    Row(a, RowSizes.Length - 1).First().next.AddRange(Row(a + 1, 0).Select(n => n.id));
+                AssignPresets();
+                PlaceEnemyBases();
+                foreach (var n in Row(1, 0)) n.state = RunNodeState.Available;
+                // Markers stay as the caravan's destinations; the world map itself is never shown during a run.
+                foreach (var n in nodes)
+                {
+                    var marker = (RunNodeMarker)WorldObjectMaker.MakeWorldObject(RoguelikeDefOf.Roguelike_RunNode);
+                    marker.Tile = n.tile;
+                    marker.nodeId = n.id;
+                    Find.WorldObjects.Add(marker);
                 }
+                active = true;
+                return true;
             }
-            Log.Error("[Roguelike] Couldn't lay out the run on this world. Try a larger planet coverage.");
+            Log.Error("[Roguelike] Couldn't find tiles for the run on this world. Try a larger planet coverage.");
             return false;
+        }
+
+        private static List<RunNode> LayoutAct(int actNumber, int firstId)
+        {
+            var result = new List<RunNode>();
+            for (int r = 0; r < RowSizes.Length; r++)
+                for (int c = 0; c < RowSizes[r]; c++)
+                    result.Add(new RunNode
+                    {
+                        id = firstId + result.Count, act = actNumber, row = r, col = c,
+                        type = r == RowSizes.Length - 1 ? RunNodeType.Boss : RunNodeType.Normal,
+                        state = RunNodeState.Locked,
+                    });
+            return result;
+        }
+
+        /// <summary>Every tile a node could use, grouped by biome.</summary>
+        private static Dictionary<BiomeDef, List<PlanetTile>> TilesByBiome()
+        {
+            var grid = Find.WorldGrid;
+            var surface = grid.Surface;
+            var byBiome = new Dictionary<BiomeDef, List<PlanetTile>>();
+            for (int i = 0; i < surface.TilesCount; i++)
+            {
+                var tile = surface.PlanetTileForID(i);
+                var biome = grid[tile].PrimaryBiome;
+                if (biome == null || biome.settlementSelectionWeight <= 0f || !TileFinder.IsValidTileForNewSettlement(tile)) continue;
+                if (!byBiome.TryGetValue(biome, out var list)) byBiome[biome] = list = new List<PlanetTile>();
+                list.Add(tile);
+            }
+            return byBiome;
+        }
+
+        /// <summary>
+        /// A random tile per node: pick a biome (weighted like vanilla's settlement picks, so harsh biomes are rarer),
+        /// avoiding the biomes of the node's row siblings while others are left, then any tile of it clear of the others.
+        /// </summary>
+        private static bool AssignTiles(List<RunNode> all, Dictionary<BiomeDef, List<PlanetTile>> byBiome)
+        {
+            if (byBiome.Count == 0) return false;
+            var grid = Find.WorldGrid;
+            var taken = new List<PlanetTile>();
+            foreach (var n in all)
+            {
+                var biomes = byBiome.Keys.ToList();
+                if (n.act == 1 && n.row == 0)
+                {
+                    var mild = biomes.Where(b => b.settlementSelectionWeight >= LandingBiomeWeight).ToList();
+                    if (mild.Count > 0) biomes = mild;
+                }
+                var siblingBiomes = all.Where(o => o != n && o.act == n.act && o.row == n.row && o.tile.Valid).Select(o => grid[o.tile].PrimaryBiome).ToList();
+                var fresh = biomes.Where(b => !siblingBiomes.Contains(b)).ToList();
+                if (fresh.Count > 0) biomes = fresh;
+
+                n.tile = PlanetTile.Invalid;
+                for (int tries = 0; tries < 40 && !n.tile.Valid; tries++)
+                {
+                    var tile = byBiome[biomes.RandomElementByWeight(b => b.settlementSelectionWeight)].RandomElement();
+                    if (taken.All(t => grid.ApproxDistanceInTiles(t, tile) >= MinNodeGapTiles)) n.tile = tile;
+                }
+                if (!n.tile.Valid) return false;
+                taken.Add(n.tile);
+            }
+            return true;
         }
 
         /// <summary>Clears every NPC settlement off the planet so only the run's nodes remain.</summary>
@@ -427,98 +523,6 @@ namespace Roguelike
                 settlement.Name = SettlementNameGenerator.GenerateSettlementName(settlement);
                 Find.WorldObjects.Add(settlement);
             }
-        }
-
-        private List<RunNode> TryLayoutAct(int actNumber, PlanetTile near, List<RunNode> placed, float scale, ref Vector3[] centers)
-        {
-            bool Free(PlanetTile t) => TileFinder.IsValidTileForNewSettlement(t) && placed.All(p => Find.WorldGrid.ApproxDistanceInTiles(p.tile, t) >= MinNodeGapTiles * scale);
-            int span = Mathf.RoundToInt(RowSpacingTiles * scale * (RowSizes.Length - 1));
-            for (int attempt = 0; attempt < 8; attempt++)
-            {
-                PlanetTile start;
-                if (!near.Valid) start = TileFinder.RandomStartingTile();
-                else if (!TileFinder.TryFindTileWithDistance(near, Mathf.RoundToInt(10 * scale), Mathf.RoundToInt(22 * scale), out start, Free)) continue;
-                if (!start.Valid || !Free(start)) continue;
-                if (!TileFinder.TryFindTileWithDistance(start, Mathf.RoundToInt(span * 0.9f), Mathf.RoundToInt(span * 1.2f), out var boss, Free)) continue;
-                centers ??= TileCenters();
-                var layout = TryLayout(start, boss, placed, scale, centers);
-                if (layout == null) continue;
-                foreach (var n in layout)
-                {
-                    n.act = actNumber;
-                    n.id += placed.Count;
-                }
-                return layout;
-            }
-            return null;
-        }
-
-        private static Vector3[] TileCenters()
-        {
-            var grid = Find.WorldGrid;
-            var surface = grid.Surface;
-            var centers = new Vector3[surface.TilesCount];
-            for (int i = 0; i < centers.Length; i++) centers[i] = grid.GetTileCenter(surface.PlanetTileForID(i));
-            return centers;
-        }
-
-        /// <summary>Places rows along the great circle from start to boss, columns spread sideways, each snapped to the nearest usable tile.</summary>
-        private static List<RunNode> TryLayout(PlanetTile start, PlanetTile boss, List<RunNode> earlier, float scale, Vector3[] centers)
-        {
-            var grid = Find.WorldGrid;
-            var surface = grid.Surface;
-            Vector3 a = grid.GetTileCenter(start), b = grid.GetTileCenter(boss);
-            float radius = a.magnitude;
-            Vector3 side = Vector3.Cross(a, b).normalized;
-            float tileSize = grid.AverageTileSize;
-
-            var result = new List<RunNode>();
-            for (int r = 0; r < RowSizes.Length; r++)
-            {
-                int n = RowSizes[r];
-                Vector3 rowCenter = Vector3.Slerp(a, b, r / (float)(RowSizes.Length - 1));
-                for (int c = 0; c < n; c++)
-                {
-                    PlanetTile tile;
-                    if (r == 0 && n % 2 == 1 && c == n / 2) tile = start;
-                    else if (r == RowSizes.Length - 1 && n == 1) tile = boss;
-                    else
-                    {
-                        Vector3 target = (rowCenter + side * ((c - (n - 1) / 2f) * ColSpacingTiles * scale * tileSize)).normalized * radius;
-                        tile = NearestUsableTile(target, centers, surface, start, boss, earlier.Concat(result).ToList(), tileSize, scale);
-                        if (!tile.Valid) return null;
-                    }
-                    result.Add(new RunNode
-                    {
-                        id = result.Count, row = r, col = c, tile = tile,
-                        type = r == RowSizes.Length - 1 ? RunNodeType.Boss : RunNodeType.Normal,
-                        state = RunNodeState.Locked,
-                    });
-                }
-            }
-            return result;
-        }
-
-        private static PlanetTile NearestUsableTile(Vector3 target, Vector3[] centers, PlanetLayer surface, PlanetTile start, PlanetTile boss, List<RunNode> placed, float tileSize, float scale)
-        {
-            // Start and boss are fixed anchors placed without snapping, so keep every other node clear of them too.
-            var taken = placed.Select(p => p.tile).Append(start).Append(boss).ToList();
-            float search = SearchRadiusTiles * scale * tileSize;
-            float maxSqr = search * search;
-            var candidates = new List<(int id, float d)>();
-            for (int i = 0; i < centers.Length; i++)
-            {
-                float d = (centers[i] - target).sqrMagnitude;
-                if (d <= maxSqr) candidates.Add((i, d));
-            }
-            foreach (var (id, _) in candidates.OrderBy(x => x.d))
-            {
-                var tile = surface.PlanetTileForID(id);
-                if (!TileFinder.IsValidTileForNewSettlement(tile)) continue;
-                if (taken.Any(t => t == tile || Find.WorldGrid.ApproxDistanceInTiles(t, tile) < MinNodeGapTiles * scale)) continue;
-                return tile;
-            }
-            return PlanetTile.Invalid;
         }
 
         /// <summary>Slay-the-Spire style edges: each node links to the nearest node in the next row, sometimes a neighbor too, with no crossings; every node gets an incoming edge.</summary>
@@ -611,28 +615,15 @@ namespace Roguelike
         public override void WorldComponentUpdate()
         {
             if (!active) return;
-            // Open the next-node choice once nothing else (reward screen, event dialog, long event) is in the way.
-            if (pendingPickNodeId >= 0 && !RunOver && Current.ProgramState == ProgramState.Playing && !LongEventHandler.ShouldWaitForEvent
-                && Find.WindowStack.WindowOfType<Dialog_RewardPick>() == null && Find.WindowStack.WindowOfType<Dialog_NodeTree>() == null && Find.WindowStack.WindowOfType<Dialog_FormCaravan>() == null)
-                OpenNextPick();
-            if (!WorldRendererUtility.WorldSelected) return;
-            foreach (var n in nodes)
-            {
-                foreach (int id in n.next)
-                {
-                    var to = NodeById(id);
-                    RunLines.Draw(n.tile, to.tile, EdgeStyle(n, to));
-                }
-            }
-        }
-
-        private static RunLines.Style EdgeStyle(RunNode from, RunNode to)
-        {
-            bool fromTaken = from.state == RunNodeState.Current || from.state == RunNodeState.Completed;
-            if (fromTaken && to.state == RunNodeState.Available) return RunLines.Style.Open;
-            if (fromTaken && (to.state == RunNodeState.Current || to.state == RunNodeState.Completed)) return RunLines.Style.Taken;
-            if (to.state == RunNodeState.Skipped || from.state == RunNodeState.Skipped) return RunLines.Style.Dead;
-            return RunLines.Style.Future;
+            // Open level-ups, then the next-node choice, once nothing else (reward screen, event dialog, long event) is in the way.
+            bool clear = !RunOver && Current.ProgramState == ProgramState.Playing && !LongEventHandler.ShouldWaitForEvent
+                && Find.WindowStack.WindowOfType<Dialog_RewardPick>() == null && Find.WindowStack.WindowOfType<Dialog_NodeTree>() == null
+                && Find.WindowStack.WindowOfType<Dialog_FormCaravan>() == null && Find.WindowStack.WindowOfType<Dialog_Packing>() == null;
+            if (clear && pendingLevelUps > 0) OpenLevelUp();
+            else if (clear && pendingPickNodeId >= 0) OpenNextPick();
+            // The world map is never shown during a run: whenever it would be, the flat act map covers it.
+            if (WorldRendererUtility.WorldSelected && Current.ProgramState == ProgramState.Playing && Find.WindowStack.WindowOfType<Dialog_RunMap>() == null)
+                Find.WindowStack.Add(new Dialog_RunMap(coversWorld: true));
         }
 
         public override void ExposeData()
@@ -643,6 +634,7 @@ namespace Roguelike
             Scribe_Values.Look(ref pendingRewardNodeId, "pendingRewardNodeId", -1);
             Scribe_Values.Look(ref pointsEarned, "pointsEarned");
             Scribe_Values.Look(ref pendingPickNodeId, "pendingPickNodeId", -1);
+            Scribe_Values.Look(ref pendingLevelUps, "pendingLevelUps");
             Scribe_Values.Look(ref act, "act", 1);
             Scribe_Values.Look(ref ascension, "ascension");
             Scribe_Values.Look(ref writUsedAct, "writUsedAct");
@@ -656,49 +648,7 @@ namespace Roguelike
         }
     }
 
-    /// <summary>Line drawing for act-graph edges on the world map.</summary>
-    [StaticConstructorOnStartup]
-    public static class RunLines
-    {
-        public enum Style { Future, Open, Taken, Dead }
-
-        private const int Segments = 20;
-        private const float Lift = 1.003f;
-
-        private static readonly Material Future = Mat(new Color(0.8f, 0.8f, 0.8f, 0.45f));
-        private static readonly Material Open = Mat(new Color(1f, 0.85f, 0.3f, 0.95f));
-        private static readonly Material Taken = Mat(new Color(1f, 1f, 1f, 0.9f));
-        private static readonly Material Dead = Mat(new Color(0.4f, 0.4f, 0.4f, 0.3f));
-        private static readonly Material Spark = Mat(new Color(1f, 0.97f, 0.8f, 1f));
-
-        private static Material Mat(Color c) => MaterialPool.MatFrom(GenDraw.LineTexPath, ShaderDatabase.WorldOverlayTransparent, c, 3590);
-
-        public static void Draw(PlanetTile a, PlanetTile b, Style style)
-        {
-            var grid = Find.WorldGrid;
-            Vector3 pa = grid.GetTileCenter(a), pb = grid.GetTileCenter(b);
-            var mat = style switch { Style.Open => Open, Style.Taken => Taken, Style.Dead => Dead, _ => Future };
-            float width = style == Style.Open ? 2f : 1.2f;
-            // Split into short arcs so the line follows the planet's curve instead of cutting under it.
-            Vector3 prev = pa * Lift;
-            for (int i = 1; i <= Segments; i++)
-            {
-                Vector3 p = Vector3.Slerp(pa, pb, i / (float)Segments) * Lift;
-                GenDraw.DrawWorldLineBetween(prev, p, mat, width);
-                prev = p;
-            }
-            if (style != Style.Open) return;
-            // Open paths carry bright sparks flowing toward the choices.
-            float time = Time.realtimeSinceStartup;
-            for (int k = 0; k < 2; k++)
-            {
-                float f = Mathf.Repeat(time * 0.35f + k * 0.5f, 1f);
-                GenDraw.DrawWorldLineBetween(Vector3.Slerp(pa, pb, f) * Lift * 1.0003f, Vector3.Slerp(pa, pb, Mathf.Min(1f, f + 0.05f)) * Lift * 1.0003f, Spark, 3.2f);
-            }
-        }
-    }
-
-    /// <summary>World-map marker for one act-graph node.</summary>
+    /// <summary>A node's tile on the hidden planet: where the caravan goes when the node is chosen.</summary>
     public class RunNodeMarker : WorldObject
     {
         public int nodeId = -1;
@@ -720,64 +670,6 @@ namespace Roguelike
                     _ => name,
                 };
             }
-        }
-
-        /// <summary>Each node kind has its own icon (Textures/Roguelike/Nodes), tinted by state.</summary>
-        public override Texture2D ExpandingIcon => NodeIcons.For(Node) ?? base.ExpandingIcon;
-
-        public override Color ExpandingIconColor
-        {
-            get
-            {
-                var n = Node;
-                if (n == null) return base.ExpandingIconColor;
-                return n.state switch
-                {
-                    // Choices breathe so they stand out from the rest of the graph.
-                    RunNodeState.Available => Color.Lerp(n.IsBoss ? new Color(0.7f, 0.25f, 0.2f) : new Color(0.75f, 0.68f, 0.45f), n.IsBoss ? new Color(1f, 0.45f, 0.35f) : new Color(1f, 0.95f, 0.75f), Roguelike.Style.Pulse(3f, nodeId)),
-                    RunNodeState.Current => new Color(0.5f, 1f, 0.5f),
-                    RunNodeState.Completed => new Color(0.55f, 0.55f, 0.55f),
-                    RunNodeState.Skipped => new Color(0.3f, 0.3f, 0.3f, 0.6f),
-                    _ => n.IsBoss ? new Color(0.7f, 0.25f, 0.2f) : new Color(0.65f, 0.65f, 0.65f, 0.8f),
-                };
-            }
-        }
-
-        public override string GetInspectString()
-        {
-            var n = Node;
-            var sb = new StringBuilder(base.GetInspectString());
-            if (n?.preset == null) return sb.ToString();
-            void Line(string s) { if (sb.Length > 0) sb.AppendLine(); sb.Append(s); }
-            Line($"Act {WorldComponent_RoguelikeRun.Get.act}, row {n.row + 1}{(n.IsBoss ? " (boss)" : "")} · {StateText(n.state)}");
-            if (n.next.Count > 0) Line($"Leads to {n.next.Count} node{(n.next.Count == 1 ? "" : "s")}.");
-            // Inspect strings must not contain blank lines.
-            Line(n.RewardText);
-            Line(n.Briefing.Replace("\n\n", "\n"));
-            return sb.ToString();
-        }
-
-        private static string StateText(RunNodeState s) => s switch
-        {
-            RunNodeState.Available => "available: right-click with a caravan to travel here",
-            RunNodeState.Current => "current node",
-            RunNodeState.Completed => "cleared",
-            RunNodeState.Skipped => "skipped",
-            _ => "locked",
-        };
-
-        public override IEnumerable<FloatMenuOption> GetFloatMenuOptions(Caravan caravan)
-        {
-            foreach (var o in base.GetFloatMenuOptions(caravan)) yield return o;
-            var report = CaravanArrivalAction_EnterRunNode.CanEnter(this);
-            if (!report.Accepted)
-            {
-                if (!report.FailReason.NullOrEmpty()) yield return new FloatMenuOption($"Go to {Label} ({report.FailReason})", null);
-                yield break;
-            }
-            // No overland travel: the caravan goes straight into the chosen node.
-            var marker = this;
-            yield return new FloatMenuOption("Go to " + Label, () => GoTo(caravan, marker), revalidateWorldClickTarget: this);
         }
 
         public static void GoTo(Caravan caravan, RunNodeMarker marker)
@@ -844,7 +736,7 @@ namespace Roguelike
             }
             if (!node.preset.HasMap)
             {
-                // Event nodes resolve right on the world map.
+                // Map-less nodes resolve on the spot, over the act map.
                 run.Choose(node);
                 EventUtility.Open(node, caravan);
                 return;

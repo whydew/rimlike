@@ -3,88 +3,100 @@
 
   <!-- Expeditions that need drafted blueprints and finished research (from docs/research/rimworld-early-game-pacing.md,
        candidates 21-40). They are never assigned when the map is generated; they show up as next-node choices once
-       the run has the blueprints and the research is done, making those rewards visibly useful. -->
+       the run has the blueprints and the research is done, making those rewards visibly useful. Like every expedition,
+       a short objective plus stretch goals (each levels up a pawn). -->
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_UniformWorkshop</defName>
     <label>uniform workshop</label>
-    <description>Grow cotton, set up a tailor's workshop and dress the whole squad in new clothes, with cloth to spare.</description>
+    <description>Set up a tailor's workshop and make everyone a duster; stay to dress the whole squad, with cloth to spare.</description>
     <requiresBlueprints><li>Roguelike_BP_Crafting</li></requiresBlueprints>
     <requiresResearch><li>ComplexClothing</li></requiresResearch>
     <growingTwelfths>4</growingTwelfths> <!-- cotton for the spare cloth -->
     <requirements>
       <li><kind>Produce</kind><thing>Apparel_Duster</thing><count>1</count><perColonist>true</perColonist></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
+    <stretchGoals>
       <li><kind>Produce</kind><thing>Apparel_BasicShirt</thing><count>1</count><perColonist>true</perColonist></li>
       <li><kind>Produce</kind><thing>Apparel_Pants</thing><count>1</count><perColonist>true</perColonist></li>
       <li><kind>Keep</kind><thing>Cloth</thing><count>100</count></li>
-      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
-    </requirements>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_FurnishedRetreat</defName>
     <label>furnished retreat</label>
-    <description>Make this place a home: furnished bedrooms for everyone.</description>
+    <description>Make this place a home: bedrooms with dressers; stay to furnish them properly.</description>
     <requiresBlueprints><li>Roguelike_BP_Comfort</li></requiresBlueprints>
     <requiresResearch><li>ComplexFurniture</li></requiresResearch>
     <requirements>
-      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells><minImpressiveness>65</minImpressiveness></li>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
       <li><kind>Build</kind><thing>Dresser</thing><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
+    <stretchGoals>
       <li><kind>Build</kind><thing>EndTable</thing><count>1</count><perColonist>true</perColonist></li>
       <li><kind>Build</kind><thing>Armchair</thing><count>2</count></li>
-    </requirements>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells><minImpressiveness>65</minImpressiveness></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_QuartermasterDepot</defName>
     <label>quartermaster depot</label>
-    <description>Build a shelved warehouse, fill it with supplies for the road and keep it stocked.</description>
+    <description>Build a shelved warehouse; stay to fill it with supplies for the road and keep it stocked.</description>
     <requiresBlueprints><li>Roguelike_BP_Storage</li></requiresBlueprints>
     <ensureMineable><Steel>600</Steel></ensureMineable>
     <requirements>
       <li><kind>Build</kind><thing>Shelf</thing><count>8</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
+    <stretchGoals>
       <li><kind>Keep</kind><thing>WoodLog</thing><count>1000</count><holdDays>10</holdDays></li>
       <li><kind>Keep</kind><thing>Steel</thing><count>500</count><holdDays>10</holdDays></li>
       <li><kind>Keep</kind><thing>MealSimple</thing><count>10</count><perColonist>true</perColonist><holdDays>10</holdDays></li>
-      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
-    </requirements>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_RenewableCampus</defName>
     <label>renewable campus</label>
-    <description>Wire up a settlement that runs on sun, wind and batteries, with heating for the cold nights.</description>
+    <description>Wire up solar power; stay for wind, batteries and heating for the cold nights.</description>
     <requiresBlueprints><li>Roguelike_BP_Power</li><li>Roguelike_BP_Climate</li></requiresBlueprints>
     <requiresResearch><li>Electricity</li><li>SolarPanels</li><li>Batteries</li></requiresResearch>
     <!-- 3 solar + 2 wind + 4 batteries + heater: ~850 steel, 21 components. -->
     <ensureMineable><Steel>900</Steel><ComponentIndustrial>24</ComponentIndustrial></ensureMineable>
     <requirements>
       <li><kind>Build</kind><thing>SolarGenerator</thing><count>3</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+    </requirements>
+    <stretchGoals>
       <li><kind>Build</kind><thing>WindTurbine</thing><count>2</count></li>
       <li><kind>Build</kind><thing>Battery</thing><count>4</count></li>
       <li><kind>Build</kind><thing>Heater</thing><count>1</count></li>
-      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
-    </requirements>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_FieldHospital</defName>
     <label>field hospital</label>
-    <description>Set up a proper hospital: medical beds, a vitals monitor and a medicine stock.</description>
+    <description>Set up medical beds; stay for a vitals monitor and a medicine stock.</description>
     <requiresBlueprints><li>Roguelike_BP_Medical</li><li>Roguelike_BP_Power</li></requiresBlueprints>
     <requiresResearch><li>Electricity</li><li>HospitalBed</li><li>VitalsMonitor</li></requiresResearch>
     <requirements>
       <li><kind>Build</kind><thing>HospitalBed</thing><count>2</count></li>
-      <li><kind>Build</kind><thing>VitalsMonitor</thing><count>1</count></li>
-      <li><kind>Keep</kind><thing>MedicineHerbal</thing><count>20</count><holdDays>10</holdDays></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Build</kind><thing>VitalsMonitor</thing><count>1</count></li>
+      <li><kind>Keep</kind><thing>MedicineHerbal</thing><count>20</count><holdDays>10</holdDays></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_IndoorHarvest</defName>
     <label>indoor harvest</label>
-    <description>Grow rice under lamps, whatever the weather outside.</description>
+    <description>Build hydroponics under a sun lamp; stay to grow rice whatever the weather outside.</description>
     <requiresBlueprints><li>Roguelike_BP_Farming</li><li>Roguelike_BP_Power</li></requiresBlueprints>
     <requiresResearch><li>Electricity</li><li>Hydroponics</li></requiresResearch>
     <!-- 6 basins + sun lamp + ~3.3 kW of daytime power (2 solar): ~850 steel, 12 components. -->
@@ -92,8 +104,11 @@
     <requirements>
       <li><kind>Build</kind><thing>HydroponicsBasin</thing><count>6</count></li>
       <li><kind>Build</kind><thing>SunLamp</thing><count>1</count></li>
-      <li><kind>Produce</kind><thing>RawRice</thing><count>1200</count></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>400</count></li>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>1200</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
 </Defs>

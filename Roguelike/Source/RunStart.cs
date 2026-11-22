@@ -17,13 +17,6 @@ namespace Roguelike
     {
         public static bool ActiveInCurrentScenario => Find.Scenario?.AllParts.OfType<ScenPart_RoguelikeRun>().Any() == true;
 
-        /// <summary>The start-row node at <paramref name="tile"/>, if the player may land there.</summary>
-        public static RunNode StartNodeAt(PlanetTile tile)
-        {
-            var node = WorldComponent_RoguelikeRun.Get?.NodeAt(tile);
-            return node != null && node.row == 0 && node.state == RunNodeState.Available ? node : null;
-        }
-
         /// <summary>Starter loadout id; locked starters are hidden until bought with meta points.</summary>
         public string starterId = "crashlanded";
         public bool requiresUnlock;
@@ -31,7 +24,7 @@ namespace Roguelike
         public RelicDef starterRelic;
 
         public override string Summary(Scenario scen) =>
-            "Travel a branching act of nodes on the world map, ending in a boss. Each node has an objective and worsening weather." +
+            "Travel a branching act of nodes on the act map, ending in a boss. Each node has an objective and worsening weather." +
             (starterRelic != null ? $"\n\nSignature relic: {starterRelic.LabelCap}. {starterRelic.description}" : "");
 
         public override void ExposeData()
@@ -92,42 +85,6 @@ namespace Roguelike
             }
             RelicEffects.OnRunStart(map);
             NodeLauncher.StartOn(map, node.preset, new LookTargets(map.Center, map), node.modifier);
-        }
-    }
-
-    /// <summary>During a run, landing is only allowed on a starting node. Selecting the marker itself counts.</summary>
-    [HarmonyPatch(typeof(Page_SelectStartingSite), "CanDoNext")]
-    public static class Patch_SelectStartingSite_CanDoNext
-    {
-        public static bool Prefix(ref bool __result)
-        {
-            if (!ScenPart_RoguelikeRun.ActiveInCurrentScenario) return true;
-
-            var selector = Find.WorldSelector;
-            if (!Find.WorldInterface.SelectedTile.Valid && selector.NumSelectedObjects == 1 && selector.SelectedObjects[0] is RunNodeMarker picked)
-            {
-                Find.WorldInterface.SelectedTile = picked.Tile;
-            }
-
-            if (ScenPart_RoguelikeRun.StartNodeAt(Find.WorldInterface.SelectedTile) == null)
-            {
-                Messages.Message("Choose one of the starting nodes (bottom row) to begin the run.", MessageTypeDefOf.RejectInput, false);
-                __result = false;
-                return false;
-            }
-            return true;
-        }
-    }
-
-    /// <summary>Points the camera at the starting row when the landing page opens.</summary>
-    [HarmonyPatch(typeof(Page_SelectStartingSite), nameof(Page_SelectStartingSite.PostOpen))]
-    public static class Patch_SelectStartingSite_PostOpen
-    {
-        public static void Postfix()
-        {
-            if (!ScenPart_RoguelikeRun.ActiveInCurrentScenario) return;
-            var start = WorldComponent_RoguelikeRun.Get?.Row(0).Skip(1).FirstOrDefault() ?? WorldComponent_RoguelikeRun.Get?.Row(0).FirstOrDefault();
-            if (start != null) Find.WorldCameraDriver.JumpTo(Find.WorldGrid.GetTileCenter(start.tile));
         }
     }
 }

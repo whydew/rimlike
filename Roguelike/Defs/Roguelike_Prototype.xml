@@ -120,58 +120,70 @@
     tileTemperature: world-tile average temperatures (°C) the preset fits.
     threatScale, patrolIntervalDays, reinforcementDays: enemy pressure (patrols on an expedition pick a raiding faction).
     weight:          relative chance among presets of the same kind.
-    requirements:    (objective Requirements) each may add minImpressiveness (rooms: 40 decent, 50 slightly, 65 somewhat
+    requirements:    (objective Requirements; stretchGoals take the same entries, plus kind Stay) each may add minImpressiveness (rooms: 40 decent, 50 slightly, 65 somewhat
                      impressive) and holdDays (met for that many days in total; the clock pauses, not resets, when it isn't).
     ensureMineable:  e.g. <Steel>900</Steel>: the node map gets enough ore to mine that much.
   -->
 
-  <!-- Expeditions: classic base building. Each takes roughly 25-45 in-game days (see docs/research/rimworld-early-game-pacing.md):
-       a list of requirements (counts marked perColonist scale with the squad on arrival) plus a minimum stay,
-       under a weather modifier rolled per node to fit the climate (rates live on the modifiers' ModifierExtension). -->
+  <!-- Expeditions: classic base building. The objective is short (about 8-12 in-game days: get a working camp up);
+       stretchGoals are the bigger builds from docs/research/rimworld-early-game-pacing.md. Each stretch goal met levels up
+       a pawn. Once the objective is done the squad may stay for them while the weather worsens at full speed.
+       Counts marked perColonist scale with the squad on arrival. Raids come every patrolIntervalDays, announced ahead.
+       The weather modifier is rolled per node to fit the climate (rates live on the modifiers' ModifierExtension). -->
   <Roguelike.NodePresetDef Name="Roguelike_BaseExpedition" Abstract="True">
     <objective>Requirements</objective>
     <randomModifier>true</randomModifier>
-    <minDays>25</minDays>
-    <targetDays>30</targetDays>
+    <minDays>8</minDays>
+    <targetDays>10</targetDays>
     <paceSensitivity>1.5</paceSensitivity>
     <minPaceFactor>0.5</minPaceFactor>
     <maxPaceFactor>1.6</maxPaceFactor>
+    <patrolIntervalDays>6</patrolIntervalDays>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_GreatGranary</defName>
     <growingTwelfths>7</growingTwelfths>
     <label>great granary</label>
-    <description>Fertile ground, a long season. Grow a granary's worth of corn and keep the squad fed and housed.</description>
+    <description>Fertile ground, a long season. Get a first harvest in and the squad housed; stay to fill a granary with corn.</description>
     <requirements>
-      <li><kind>Produce</kind><thing>RawCorn</thing><count>1500</count></li>
-      <li><kind>Keep</kind><thing>MealSimple</thing><count>20</count><perColonist>true</perColonist></li>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>300</count></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Keep</kind><thing>MealSimple</thing><count>20</count><perColonist>true</perColonist></li>
+      <li><kind>Produce</kind><thing>RawCorn</thing><count>1500</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_HarvestRotation</defName>
     <growingTwelfths>7</growingTwelfths>
     <label>harvest rotation</label>
-    <description>Work the fields through a full rotation of rice, potatoes and corn.</description>
+    <description>Work the fields: rice first, then potatoes and corn if you stay for the full rotation.</description>
     <requirements>
-      <li><kind>Produce</kind><thing>RawRice</thing><count>600</count></li>
-      <li><kind>Produce</kind><thing>RawPotatoes</thing><count>600</count></li>
-      <li><kind>Produce</kind><thing>RawCorn</thing><count>600</count></li>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>300</count></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Produce</kind><thing>RawPotatoes</thing><count>600</count></li>
+      <li><kind>Produce</kind><thing>RawCorn</thing><count>600</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_RiceCooperative</defName>
     <growingTwelfths>5</growingTwelfths>
     <label>rice cooperative</label>
-    <description>Paddies by the water. Bring in a great rice harvest and give everyone a room of their own.</description>
+    <description>Paddies by the water. Bring in a rice harvest; stay for a great one and a room for everyone.</description>
     <requirements>
-      <li><kind>Produce</kind><thing>RawRice</thing><count>1800</count></li>
-      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>400</count></li>
+      <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
+      <li><kind>Produce</kind><thing>RawRice</thing><count>1800</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
@@ -180,45 +192,59 @@
     <requiresSkill>Plants</requiresSkill>
     <requiresSkillLevel>8</requiresSkillLevel>
     <label>medicinal garden</label>
-    <description>Healroot grows wild here. Cultivate a medicine stock and keep everyone housed.</description>
+    <description>Healroot grows wild here. Set up camp and plant it; stay to build a medicine stock.</description>
     <requirements>
-      <li><kind>Produce</kind><thing>MedicineHerbal</thing><count>60</count></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
+      <li><kind>Keep</kind><thing>MealSimple</thing><count>5</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Produce</kind><thing>MedicineHerbal</thing><count>20</count></li>
+      <li><kind>Produce</kind><thing>MedicineHerbal</thing><count>60</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_StoneFortress</defName>
     <label>stone fortress</label>
-    <description>Rocky ground, long nights and raiders who probe the walls. Cut stone, raise a real fortress and hold it.</description>
+    <description>Rocky ground, long nights and raiders who probe the walls. Cut stone and wall in; stay to raise a real fortress and hold it.</description>
     <patrolIntervalDays>5</patrolIntervalDays>
     <requirements>
-      <li><kind>Build</kind><thing>Wall</thing><count>300</count><stuffCategory>Stony</stuffCategory><holdDays>10</holdDays></li>
-      <li><kind>Build</kind><thing>Door</thing><count>12</count></li>
+      <li><kind>Build</kind><thing>Wall</thing><count>60</count><stuffCategory>Stony</stuffCategory></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Build</kind><thing>Door</thing><count>12</count></li>
+      <li><kind>Build</kind><thing>Wall</thing><count>300</count><stuffCategory>Stony</stuffCategory><holdDays>10</holdDays></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_PrivateQuarters</defName>
     <label>private quarters</label>
-    <description>Settle in properly: a fine bedroom for everyone and a dining room worth gathering in.</description>
+    <description>Settle in: a bedroom for everyone. Stay to make them fine, with a dining room worth gathering in.</description>
     <requirements>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
+    </requirements>
+    <stretchGoals>
       <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells><minImpressiveness>50</minImpressiveness></li>
       <li><kind>DiningRoom</kind><minCells>25</minCells><minImpressiveness>65</minImpressiveness></li>
-    </requirements>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_SeasonalEndurance</defName>
     <label>seasonal endurance</label>
-    <description>Hold this ground for a full season. Nobody can be lost.</description>
-    <minDays>30</minDays>
+    <description>Hold this ground. Nobody can be lost until the objective is met; stay longer for a full season.</description>
+    <minDays>10</minDays>
     <requirements>
       <li><kind>NoDeaths</kind></li>
-      <li><kind>Keep</kind><thing>MealSimple</thing><count>10</count><perColonist>true</perColonist></li>
+      <li><kind>Keep</kind><thing>MealSimple</thing><count>5</count><perColonist>true</perColonist></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
+    <stretchGoals>
+      <li><kind>Stay</kind><count>20</count></li>
+      <li><kind>Stay</kind><count>30</count></li>
+    </stretchGoals>
   </Roguelike.NodePresetDef>
 
   <!-- Combat -->
@@ -343,7 +369,7 @@
     <pooled>false</pooled>
     <text>A sheltered hollow, out of the wind. There is time for one thing before you move on.</text>
     <options>
-      <li><label>Rest</label><result>Everyone sleeps soundly for once.</result><outcomes><li><kind>HealAll</kind></li></outcomes></li>
+      <li><label>Rest</label><result>Everyone sleeps soundly for once.</result><outcomes><li><kind>HealAll</kind></li><li><kind>ClearWear</kind></li></outcomes></li>
       <li><label>Train</label><result>You drill until dark.</result><outcomes><li><kind>TrainSkills</kind><amount>4000</amount></li></outcomes></li>
       <li><label>Field surgery</label><result>With steady hands and a clean knife, you treat the worst of your wounds.</result><outcomes><li><kind>FixWorst</kind></li></outcomes></li>
     </options>

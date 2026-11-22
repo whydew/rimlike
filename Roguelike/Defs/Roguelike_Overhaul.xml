@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Wear: every cleared node with a map adds 0.1 to each squad member (Source/Overhaul.cs, Wear.PerNode).
+       Only a rest site's Rest clears it. -->
+  <HediffDef>
+    <defName>Roguelike_Wear</defName>
+    <label>road wear</label>
+    <description>The toll of node after node without a real rest: aching joints, short sleep, frayed nerves. It only builds up. A rest site's Rest clears it.</description>
+    <hediffClass>HediffWithComps</hediffClass>
+    <defaultLabelColor>(0.8, 0.7, 0.5)</defaultLabelColor>
+    <isBad>true</isBad>
+    <initialSeverity>0.1</initialSeverity>
+    <maxSeverity>1</maxSeverity>
+    <everCurableByItem>false</everCurableByItem>
+    <stages>
+      <li>
+        <label>travel-stiff</label>
+      </li>
+      <li>
+        <minSeverity>0.2</minSeverity>
+        <label>worn</label>
+        <statOffsets><WorkSpeedGlobal>-0.04</WorkSpeedGlobal></statOffsets>
+      </li>
+      <li>
+        <minSeverity>0.4</minSeverity>
+        <label>weary</label>
+        <statOffsets><WorkSpeedGlobal>-0.08</WorkSpeedGlobal></statOffsets>
+        <capMods><li><capacity>Moving</capacity><offset>-0.05</offset></li></capMods>
+      </li>
+      <li>
+        <minSeverity>0.6</minSeverity>
+        <label>exhausted</label>
+        <statOffsets><WorkSpeedGlobal>-0.15</WorkSpeedGlobal></statOffsets>
+        <capMods>
+          <li><capacity>Moving</capacity><offset>-0.1</offset></li>
+          <li><capacity>Consciousness</capacity><offset>-0.05</offset></li>
+        </capMods>
+      </li>
+      <li>
+        <minSeverity>0.8</minSeverity>
+        <label>broken down</label>
+        <statOffsets><WorkSpeedGlobal>-0.25</WorkSpeedGlobal></statOffsets>
+        <capMods>
+          <li><capacity>Moving</capacity><offset>-0.15</offset></li>
+          <li><capacity>Consciousness</capacity><offset>-0.1</offset></li>
+        </capMods>
+      </li>
+    </stages>
+  </HediffDef>
+
+</Defs>
