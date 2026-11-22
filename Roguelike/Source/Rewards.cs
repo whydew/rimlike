@@ -73,7 +73,7 @@ namespace Roguelike
             gated ??= new HashSet<BuildableDef>(DefDatabase<BlueprintGroupDef>.AllDefs.SelectMany(g => g.buildings));
     }
 
-    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit, Path, Research }
+    public enum RewardKind { Relic, Gear, Implant, Blueprint, Recruit, Path, Research, LevelUp }
 
     /// <summary>One card on the reward screen.</summary>
     public class RewardCard
@@ -87,6 +87,12 @@ namespace Roguelike
         public RunNode pathNode;
         /// <summary>For Research cards: the project the card completes.</summary>
         public ResearchProjectDef research;
+        /// <summary>For LevelUp cards: who grows, and how (a trait to gain or lose, or a skill).</summary>
+        public Pawn levelPawn;
+        public LevelUpKind levelKind;
+        public TraitDef trait;
+        public int traitDegree;
+        public SkillDef skill;
 
         public string Title => kind switch
         {
@@ -96,6 +102,7 @@ namespace Roguelike
             RewardKind.Recruit => recruit.Name.ToStringFull,
             RewardKind.Path => (pathNode.IsBoss ? "Boss: " : "") + pathNode.preset.LabelCap,
             RewardKind.Research => research.LabelCap,
+            RewardKind.LevelUp => levelPawn.LabelShortCap,
             _ => "?",
         };
 
@@ -108,6 +115,7 @@ namespace Roguelike
             RewardKind.Recruit => "Recruit",
             RewardKind.Path => pathNode.IsBoss ? $"Act {pathNode.act} boss" : GenText.SplitCamelCase(pathNode.preset.kind.ToString()),
             RewardKind.Research => "Research",
+            RewardKind.LevelUp => "Level up",
             _ => "",
         };
 
@@ -120,6 +128,7 @@ namespace Roguelike
             RewardKind.Recruit => new Color(0.45f, 0.8f, 0.4f),
             RewardKind.Path => pathNode.IsBoss ? new Color(0.85f, 0.3f, 0.25f) : pathNode.preset.HasMap ? new Color(0.55f, 0.55f, 0.6f) : new Color(0.4f, 0.65f, 0.85f),
             RewardKind.Research => new Color(0.7f, 0.5f, 0.95f),
+            RewardKind.LevelUp => new Color(0.35f, 0.8f, 0.85f),
             _ => Color.white,
         };
     }
@@ -233,6 +242,9 @@ namespace Roguelike
                     }
                     foreach (var extra in card.gear.extraThings)
                         Deliver(ThingMaker.MakeThing(extra, extra.MadeFromStuff ? GenStuff.DefaultStuffFor(extra) : null), map, caravan);
+                    break;
+                case RewardKind.LevelUp:
+                    LevelUps.Apply(card);
                     break;
                 case RewardKind.Recruit:
                     if (card.recruit.Faction != Faction.OfPlayer) card.recruit.SetFaction(Faction.OfPlayer);

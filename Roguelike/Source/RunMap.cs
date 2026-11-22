@@ -126,6 +126,8 @@ namespace Roguelike
         public int pointsEarned;
         /// <summary>Cleared node whose "choose your next node" screen is still open or due (reopened after loading).</summary>
         public int pendingPickNodeId = -1;
+        /// <summary>Level-ups earned (stretch goals) whose pick screen hasn't been shown yet.</summary>
+        public int pendingLevelUps;
         /// <summary>Current act, 1..ActsPerRun. Beating the last act's boss wins the run.</summary>
         public int act = 1;
         /// <summary>Ascension level chosen for this run (0 = none).</summary>
@@ -186,7 +188,7 @@ namespace Roguelike
                     MetaProgress.Award(1);
                 }
                 pendingRewardNodeId = -1;
-                RequestNextPick(node);
+                if (!StaysForStretch(node)) RequestNextPick(node);
             }));
         }
 
@@ -370,8 +372,29 @@ namespace Roguelike
                 act = node.act + 1;
                 Find.LetterStack.ReceiveLetter($"Act {act} of {ActsPerRun}", "The boss is beaten. The next act lies ahead, harder than the last.", LetterDefOf.PositiveEvent);
             }
+            if (node.preset.HasMap) Wear.AddForNode(Current.Game.FindMap(tile));
             if (node.reward != RunRewardKind.None) OfferReward(node, Current.Game.FindMap(tile));
-            else RequestNextPick(node);
+            else if (!StaysForStretch(node)) RequestNextPick(node);
+        }
+
+        /// <summary>The node's objective is done but stretch goals are left: the squad stays until it chooses to leave.</summary>
+        private static bool StaysForStretch(RunNode node) =>
+            Current.Game.FindMap(node.tile)?.GetComponent<MapComponent_RoguelikeNode>() is { StretchOpen: true };
+
+        /// <summary>One level-up: pick 1 of a few upgrades, each for a squad member.</summary>
+        private void OpenLevelUp()
+        {
+            var cards = LevelUps.Generate(RewardUtility.ChoiceCount(this));
+            if (cards.Count == 0)
+            {
+                pendingLevelUps = 0;
+                return;
+            }
+            Find.WindowStack.Add(new Dialog_RewardPick(cards, "Stretch goal met: one of your squad grows", card =>
+            {
+                pendingLevelUps = Mathf.Max(0, pendingLevelUps - 1);
+                if (card != null) RewardUtility.Apply(card, null);
+            }, allowSkip: false, title: "Level up"));
         }
 
         // ---------- Generation ----------
@@ -592,10 +615,12 @@ namespace Roguelike
         public override void WorldComponentUpdate()
         {
             if (!active) return;
-            // Open the next-node choice once nothing else (reward screen, event dialog, long event) is in the way.
-            if (pendingPickNodeId >= 0 && !RunOver && Current.ProgramState == ProgramState.Playing && !LongEventHandler.ShouldWaitForEvent
-                && Find.WindowStack.WindowOfType<Dialog_RewardPick>() == null && Find.WindowStack.WindowOfType<Dialog_NodeTree>() == null && Find.WindowStack.WindowOfType<Dialog_FormCaravan>() == null)
-                OpenNextPick();
+            // Open level-ups, then the next-node choice, once nothing else (reward screen, event dialog, long event) is in the way.
+            bool clear = !RunOver && Current.ProgramState == ProgramState.Playing && !LongEventHandler.ShouldWaitForEvent
+                && Find.WindowStack.WindowOfType<Dialog_RewardPick>() == null && Find.WindowStack.WindowOfType<Dialog_NodeTree>() == null
+                && Find.WindowStack.WindowOfType<Dialog_FormCaravan>() == null && Find.WindowStack.WindowOfType<Dialog_Packing>() == null;
+            if (clear && pendingLevelUps > 0) OpenLevelUp();
+            else if (clear && pendingPickNodeId >= 0) OpenNextPick();
             // The world map is never shown during a run: whenever it would be, the flat act map covers it.
             if (WorldRendererUtility.WorldSelected && Current.ProgramState == ProgramState.Playing && Find.WindowStack.WindowOfType<Dialog_RunMap>() == null)
                 Find.WindowStack.Add(new Dialog_RunMap(coversWorld: true));
@@ -609,6 +634,7 @@ namespace Roguelike
             Scribe_Values.Look(ref pendingRewardNodeId, "pendingRewardNodeId", -1);
             Scribe_Values.Look(ref pointsEarned, "pointsEarned");
             Scribe_Values.Look(ref pendingPickNodeId, "pendingPickNodeId", -1);
+            Scribe_Values.Look(ref pendingLevelUps, "pendingLevelUps");
             Scribe_Values.Look(ref act, "act", 1);
             Scribe_Values.Look(ref ascension, "ascension");
             Scribe_Values.Look(ref writUsedAct, "writUsedAct");

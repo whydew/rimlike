@@ -8,7 +8,7 @@ using Verse;
 
 namespace Roguelike
 {
-    public enum EventOutcomeKind { Nothing, RandomRelic, RandomGear, RandomImplant, Recruit, InjureRandom, HealAll, TrainSkills, FixWorst, Silver }
+    public enum EventOutcomeKind { Nothing, RandomRelic, RandomGear, RandomImplant, Recruit, InjureRandom, HealAll, TrainSkills, FixWorst, Silver, ClearWear }
 
     public class EventOutcome
     {
@@ -117,6 +117,8 @@ namespace Roguelike
                     var patient = hurt.RandomElement();
                     var text = HealthUtility.FixWorstHealthCondition(patient);
                     return text.NullOrEmpty() ? $"{patient.LabelShortCap} was treated." : text.ToString();
+                case EventOutcomeKind.ClearWear:
+                    return Wear.Clear(humans) > 0 ? "The wear of the road falls away." : null;
                 case EventOutcomeKind.Silver:
                     if (caravan == null) return null;
                     var silver = ThingMaker.MakeThing(ThingDefOf.Silver);

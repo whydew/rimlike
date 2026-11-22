@@ -407,6 +407,9 @@ namespace Roguelike
             var tint = GUI.color;
             switch (card.kind)
             {
+                case RewardKind.LevelUp:
+                    GUI.DrawTexture(art, PortraitsCache.Get(card.levelPawn, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
+                    break;
                 case RewardKind.Recruit:
                     GUI.DrawTexture(art, PortraitsCache.Get(card.recruit, art.size, Rot4.South, new Vector3(0f, 0f, 0.1f), 1.5f));
                     break;
@@ -456,6 +459,8 @@ namespace Roguelike
                     var unlocks = card.research.UnlockedDefs.Where(d => d is BuildableDef || d is RecipeDef).Select(d => d.label).Distinct().Take(4).ToList();
                     return "Completes this research right away." + (unlocks.Count > 0 ? "\nUnlocks: " + string.Join(", ", unlocks) + "." : "")
                            + "\n\n" + card.research.description.Split('\n')[0];
+                case RewardKind.LevelUp:
+                    return LevelUps.Short(card) + "\n\n" + LevelUps.Describe(card);
                 case RewardKind.Path:
                     return (card.pathNode.TerrainLine is { } terrain ? terrain + "\n" : "") + card.pathNode.RewardText + "\n" + card.pathNode.Briefing.Replace("\n\n", "\n");
             }

@@ -177,6 +177,42 @@ namespace Roguelike
             };
         }
 
+        private static Dialog_RewardPick LevelUpWindow =>
+            Find.WindowStack.Windows.OfType<Dialog_RewardPick>().FirstOrDefault(w => w.Cards.Count > 0 && w.Cards[0].kind == RewardKind.LevelUp);
+
+        /// <summary>Takes every pending level-up (first card each time); with <paramref name="verify"/>, checks the first one is applied.</summary>
+        private static IEnumerable<Func<bool>> TakeLevelUps(bool verify)
+        {
+            for (int i = 0; i < 10 && (Run.pendingLevelUps > 0 || LevelUpWindow != null); i++)
+            {
+                yield return () => LevelUpWindow != null;
+                var window = LevelUpWindow;
+                var card = window.Cards[0];
+                var p = card.levelPawn;
+                var rec = card.skill != null ? p.skills.GetSkill(card.skill) : null;
+                var passionBefore = rec?.passion;
+                int levelBefore = rec?.Level ?? 0;
+                if (verify && i == 0)
+                {
+                    SelfTest.Check(window.Cards.All(c => c.levelPawn != null && !LevelUps.Short(c).NullOrEmpty()), $"level up: {window.Cards.Count} upgrade cards ({string.Join("; ", window.Cards.Select(c => c.levelPawn.LabelShort + ": " + LevelUps.Short(c)))})");
+                    foreach (var w in Screenshot("s8_level_up", world: false)) yield return w;
+                }
+                int pending = Run.pendingLevelUps;
+                window.Pick(0);
+                yield return () => !Find.WindowStack.IsOpen(window);
+                if (!verify || i > 0) continue;
+                bool applied = card.levelKind switch
+                {
+                    LevelUpKind.Trait => p.story.traits.HasTrait(card.trait),
+                    LevelUpKind.Passion => rec.passion > passionBefore,
+                    LevelUpKind.Skill => rec.Level == Math.Min(SkillRecord.MaxLevel, levelBefore + LevelUps.SkillJump),
+                    LevelUpKind.Cure => !p.story.traits.allTraits.Any(t => t.def == card.trait && t.Degree == card.traitDegree),
+                    _ => false,
+                };
+                SelfTest.Check(applied && Run.pendingLevelUps == pending - 1, $"level up: {LevelUps.Short(card)} applied to {p.LabelShort}");
+            }
+        }
+
         private static IEnumerable<Func<bool>> Screenshot(string name, bool world)
         {
             if (world) CameraJumper.TryShowWorld();
@@ -295,6 +331,7 @@ namespace Roguelike
             var node = start;
             Caravan caravan = null;
             bool shotCards = false, shotPacking = false;
+            bool wearChecked = false;
             for (int step = 0; step < 40; step++)
             {
                 int actBefore = run.act;
@@ -307,6 +344,20 @@ namespace Roguelike
                 }
                 if (node.reward != RunRewardKind.None)
                     foreach (var w in PickFirstReward(node)) yield return w;
+                foreach (var w in TakeLevelUps(false)) yield return w;
+                if (node.preset.HasMap && NodeComp(map) is { StretchOpen: true })
+                {
+                    // The squad may stay for stretch goals; the next-node choice waits until it leaves.
+                    yield return Frames(30);
+                    SelfTest.Check(PathWindow == null && run.pendingPickNodeId < 0, $"node {node.id}: stays open for {NodeComp(map).preset.stretchGoals.Count} stretch goals");
+                    run.RequestNextPick(node);
+                }
+                if (node.preset.HasMap && !wearChecked)
+                {
+                    wearChecked = true;
+                    var worn = map.mapPawns.FreeColonistsSpawned.Where(p => p.RaceProps.Humanlike).ToList();
+                    SelfTest.Check(worn.Count > 0 && worn.All(p => Wear.Of(p) >= Wear.PerNode - 0.001f), $"node {node.id}: clearing it wears the squad ({string.Join(", ", worn.Select(p => $"{Wear.Of(p):0.0#}"))})");
+                }
                 if (node.IsBoss) SelfTest.Check(run.act == actBefore + 1 && !run.RunOver, $"act {actBefore} boss cleared: act {run.act} begins");
                 var nextIds = node.next;
                 SelfTest.Check(nextIds.All(id => run.NodeById(id).state == RunNodeState.Available), $"node {node.id}: its {nextIds.Count} next nodes are available");
@@ -523,13 +574,27 @@ namespace Roguelike
             SelfTest.Check(nearest > 40f, $"raider camp: camp is far from the squad ({nearest:0} cells)");
             SelfTest.Check(map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction).All(e => e.GetLord()?.LordJob is Verse.AI.Group.LordJob_DefendPoint), "raider camp: enemies hold their camp until engaged");
             int raids = comp.raidsLaunched;
-            comp.nextPatrolTick = Find.TickManager.TicksGame + 1;
+            // Raids are announced: when, from which edge, about how many.
+            var planned = comp.patrol;
+            SelfTest.Check(planned != null && planned.cell.IsValid && planned.cell.OnEdge(map) && planned.count > 0 && comp.RaidText != null,
+                $"raider camp: the next raid is announced ({comp.RaidText})");
+            var enemiesBefore = map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction).ToList();
+            comp.patrol.tick = Find.TickManager.TicksGame + 1;
             yield return Ticks(300);
-            SelfTest.Check(comp.raidsLaunched == raids + 1 && comp.nextPatrolTick > Find.TickManager.TicksGame, $"raider camp: a patrol raid arrives and the next one is scheduled ({comp.EnemiesLeft} enemies)");
+            SelfTest.Check(comp.raidsLaunched == raids + 1 && comp.patrol != null && comp.patrol != planned && comp.patrol.tick > Find.TickManager.TicksGame,
+                $"raider camp: a patrol raid arrives and the next one is announced ({comp.EnemiesLeft} enemies)");
+            var arrived = map.mapPawns.SpawnedPawnsInFaction(comp.enemyFaction).Except(enemiesBefore).ToList();
+            float fromPlan = arrived.Count == 0 ? 999f : arrived.Min(p => p.Position.DistanceTo(planned.cell));
+            SelfTest.Check(arrived.Count > 0 && fromPlan < 25f, $"raider camp: the raid walks in where it was announced ({arrived.Count} raiders, nearest {fromPlan:0} cells from the {comp.SideOf(planned.cell)} mark)");
+            // Surprise raids from the storyteller are held back on node maps; forced ones still fire.
+            var surprise = new IncidentParms { target = map, faction = comp.enemyFaction, points = 300f };
+            SelfTest.Check(!IncidentDefOf.RaidEnemy.Worker.CanFireNow(surprise), "storyteller raids are held back on node maps");
+            surprise.forced = true;
+            SelfTest.Check(IncidentDefOf.RaidEnemy.Worker.CanFireNow(surprise), "forced raids still fire");
 
-            comp.reinforcementTick = Find.TickManager.TicksGame + 1;
+            comp.reinforcements.tick = Find.TickManager.TicksGame + 1;
             yield return Ticks(300);
-            SelfTest.Check(comp.raidsLaunched == raids + 2 && comp.reinforcementTick < 0, $"raider camp: reinforcements arrive once ({comp.EnemiesLeft} enemies)");
+            SelfTest.Check(comp.raidsLaunched == raids + 2 && comp.reinforcements == null, $"raider camp: reinforcements arrive once ({comp.EnemiesLeft} enemies)");
             SelfTest.Check(comp.Condition is GameCondition_EscalatingToxic, "raider camp: toxic weather registered");
             comp.startTick -= (int)(comp.GraceDays * GenDate.TicksPerDay + 1000);
             comp.Condition.intensity = 1.5f;
@@ -560,18 +625,33 @@ namespace Roguelike
             SelfTest.Check(comp.modifier == cold && comp.Condition != null && Math.Abs(comp.ratePerDay + 1.4f) < 0.01f, $"granary: rolled modifier {comp.modifier?.defName} at {comp.ratePerDay} per day");
             int squadSize = comp.squad;
             SelfTest.Check(squadSize == map.mapPawns.FreeColonistsSpawnedCount, $"granary: requirement counts scale with the squad ({squadSize})");
-            Give(map, "RawCorn", 1500);
-            Give(map, "MealSimple", 20 * squadSize);
+            Give(map, "RawRice", 300);
             BuildRoom(map, 6, 4, squadSize, null);
             yield return Ticks(300);
-            var corn = comp.preset.requirements.First(r => r.kind == RequirementKind.Produce);
-            SelfTest.Check(comp.Have(corn) == 1500, $"granary: produced corn counts from arrival ({comp.Have(corn)})");
+            var rice = comp.preset.requirements.First(r => r.kind == RequirementKind.Produce);
+            SelfTest.Check(comp.Have(rice) == 300, $"granary: produced rice counts from arrival ({comp.Have(rice)})");
             SelfTest.Check(comp.RequirementsMet && !comp.completed, $"granary: requirements met but the minimum stay holds it open ({comp.ProgressText})");
             comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
             yield return Ticks(300);
             SelfTest.Check(comp.completed, "granary: completes once the minimum stay has passed");
 
-            // Stone fortress: only stone walls count, and the walls must then be held for 10 days.
+            // Stretch goals: the node stays open after the objective, the weather runs at full speed, and each goal met levels up a pawn.
+            SelfTest.Check(comp.StretchOpen && comp.PaceFactor > 1.01f, $"granary: stays open for {comp.preset.stretchGoals.Count} stretch goals, weather at full speed (x{comp.PaceFactor:0.00})");
+            float before = comp.Condition.intensity;
+            yield return Ticks(GenDate.TicksPerHour * 2);
+            SelfTest.Check(comp.Condition.intensity != before, $"granary: the weather keeps worsening while you stay ({comp.Condition.IntensityText(before)} -> {comp.Condition.IntensityText(comp.Condition.intensity)})");
+            Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
+            foreach (var w in Screenshot("s8_stretch_hud", world: false)) yield return w;
+            Give(map, "MealSimple", 20 * squadSize);
+            yield return Until(() => comp.StretchMet >= 1); // a level-up pauses the game, so wait on the goal, not on ticks
+            SelfTest.Check(comp.StretchMet == 1 && comp.StretchOpen, $"granary: first stretch goal met, one left ({comp.StretchText(comp.NextStretch)})");
+            foreach (var w in TakeLevelUps(true)) yield return w;
+            Give(map, "RawCorn", 1500);
+            yield return Until(() => comp.StretchMet >= 2);
+            SelfTest.Check(comp.StretchMet == 2 && !comp.StretchOpen, "granary: every stretch goal met, the node closes");
+            foreach (var w in TakeLevelUps(false)) yield return w;
+
+            // Stone fortress: only stone walls count; the big wall stretch goal must then be held for 10 days.
             foreach (var w in EnterDebugNode("Roguelike_StoneFortress", cold)) yield return w;
             map = Find.CurrentMap;
             comp = NodeComp(map);
@@ -579,49 +659,57 @@ namespace Roguelike
             int woodWalls = BuildRoom(map, 3, 3, 0, ThingDefOf.WoodLog);
             yield return Ticks(60);
             SelfTest.Check(woodWalls > 0 && comp.Have(walls) == 0, $"stone fortress: {woodWalls} wooden walls don't count as stone");
-            int stone = 0, doorsBuilt = 0;
-            SelfTest.Check(comp.enemyFaction != null && comp.nextPatrolTick > 0, "stone fortress: patrols are scheduled to test the walls");
+            SelfTest.Check(comp.enemyFaction != null && comp.patrol != null && comp.RaidText != null, $"stone fortress: raids are announced to test the walls ({comp.RaidText})");
             BuildRoom(map, 5, 5, comp.squad, null); // shelter
-            stone = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Wall).Count(x => x.Stuff != ThingDefOf.WoodLog);
+            int stone = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Wall).Count(x => x.Stuff != ThingDefOf.WoodLog);
             for (int tries = 0; stone < walls.Target(comp.squad) && tries < 5000; tries++) stone += SpawnStoneWall(map);
-            doorsBuilt = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Door).Count();
-            while (doorsBuilt < 12) { BuildRoom(map, 2, 2, 0, null); doorsBuilt++; }
             yield return Ticks(300);
-            int wallIndex = comp.preset.requirements.IndexOf(walls);
-            SelfTest.Check(comp.Have(walls) >= walls.Target(comp.squad) && !comp.RequirementsMet && comp.heldDays[wallIndex] > 0f && comp.ProgressText.Contains("held"),
-                $"stone fortress: walls built, the hold clock runs but isn't done ({comp.ProgressText})");
-            float heldBefore = comp.heldDays[wallIndex];
-            var someWalls = looseWalls.Where(x => x.Spawned).Take(comp.Have(walls) - walls.Target(comp.squad) + 5).ToList();
-            foreach (var wall in someWalls) wall.Destroy();
-            yield return Ticks(600);
-            SelfTest.Check(Math.Abs(comp.heldDays[wallIndex] - heldBefore) < 0.001f, "hold: the clock pauses (doesn't reset) while the walls are short");
-            for (int tries = 0; tries < 50 && comp.Have(walls) < walls.Target(comp.squad); tries++) SpawnStoneWall(map);
-            comp.heldDays[wallIndex] = walls.holdDays - 0.001f;
-            yield return Ticks(300);
-            SelfTest.Check(comp.RequirementsMet, $"stone fortress: requirements met once held for {walls.holdDays} days ({comp.ProgressText})");
+            SelfTest.Check(comp.RequirementsMet && !comp.completed, $"stone fortress: walls up, the minimum stay holds it open ({comp.ProgressText})");
             comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
             yield return Ticks(300);
-            SelfTest.Check(comp.completed, "stone fortress: completes after the minimum stay");
+            SelfTest.Check(comp.completed && comp.StretchOpen, "stone fortress: completes after the minimum stay, stretch goals open");
+            var bigWall = comp.preset.stretchGoals.First(r => r.kind == RequirementKind.Build && r.thing == ThingDefOf.Wall);
+            int wallIndex = comp.preset.stretchGoals.IndexOf(bigWall);
+            int doorsBuilt = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Door).Count();
+            while (doorsBuilt < 12) { BuildRoom(map, 2, 2, 0, null); doorsBuilt++; }
+            yield return Until(() => comp.StretchMet >= 1);
+            foreach (var w in TakeLevelUps(false)) yield return w;
+            for (int tries = 0; stone < bigWall.Target(comp.squad) && tries < 5000; tries++) stone += SpawnStoneWall(map);
+            yield return Ticks(300);
+            SelfTest.Check(comp.Have(bigWall) >= bigWall.Target(comp.squad) && !comp.StretchDone(wallIndex) && comp.stretchHeld[wallIndex] > 0f && comp.StretchText(bigWall).Contains("held"),
+                $"stone fortress: big wall built, the hold clock runs but isn't done ({comp.StretchText(bigWall)})");
+            float heldBefore = comp.stretchHeld[wallIndex];
+            var someWalls = looseWalls.Where(x => x.Spawned).Take(comp.Have(bigWall) - bigWall.Target(comp.squad) + 5).ToList();
+            foreach (var wall in someWalls) wall.Destroy();
+            yield return Ticks(600);
+            SelfTest.Check(Math.Abs(comp.stretchHeld[wallIndex] - heldBefore) < 0.001f, "hold: the clock pauses (doesn't reset) while the walls are short");
+            for (int tries = 0; tries < 50 && comp.Have(bigWall) < bigWall.Target(comp.squad); tries++) SpawnStoneWall(map);
+            comp.stretchHeld[wallIndex] = bigWall.holdDays - 0.001f;
+            yield return Until(() => comp.StretchDone(wallIndex));
+            SelfTest.Check(comp.StretchDone(wallIndex), $"stone fortress: the big wall stretch goal is met once held for {bigWall.holdDays} days");
+            foreach (var w in TakeLevelUps(false)) yield return w;
 
             // Private quarters: bedrooms and a dining room, plain ones first, then impressive ones.
             foreach (var w in EnterDebugNode("Roguelike_PrivateQuarters", cold)) yield return w;
             map = Find.CurrentMap;
             comp = NodeComp(map);
-            var bedrooms = comp.preset.requirements.First(r => r.kind == RequirementKind.Bedrooms);
-            var dining = comp.preset.requirements.First(r => r.kind == RequirementKind.DiningRoom);
+            var bedrooms = comp.preset.stretchGoals.First(r => r.kind == RequirementKind.Bedrooms);
+            var dining = comp.preset.stretchGoals.First(r => r.kind == RequirementKind.DiningRoom);
             BuildRoom(map, 4, 4, 1, null);
             BuildRoom(map, 7, 6, 0, null, dining: true);
             yield return Ticks(300);
             SelfTest.Check(comp.Have(bedrooms) == 0 && comp.Have(dining) == 0, "private quarters: plain rooms don't meet the quality bar");
             for (int i = 0; i < comp.squad; i++) BuildRoom(map, 4, 4, 1, null, art: true);
             BuildRoom(map, 7, 6, 0, null, dining: true, art: true);
-            yield return Ticks(300);
+            int roomsBy = Find.TickManager.TicksGame + 600;
+            yield return Until(() => comp.StretchMet >= 2 || LevelUpWindow != null || Find.TickManager.TicksGame >= roomsBy);
             string scores = string.Join(", ", map.regionGrid.AllRooms.Where(r => r.ProperRoom && r.Role != null).Select(r => $"{r.Role.label} {r.GetStat(RoomStatDefOf.Impressiveness):0}"));
             SelfTest.Check(comp.Have(bedrooms) >= comp.squad, $"private quarters: {comp.Have(bedrooms)} impressive bedrooms recognized ({scores})");
             SelfTest.Check(comp.Have(dining) == 1, "private quarters: the impressive dining room is recognized");
             SelfTest.Check(bedrooms.Card(comp.squad).Contains("slightly impressive"), $"private quarters: the card names the quality ({bedrooms.Card(comp.squad)})");
             Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
             foreach (var w in Screenshot("s7_rooms", world: false)) yield return w;
+            foreach (var w in TakeLevelUps(false)) yield return w;
 
             // Renewable campus: the map holds enough ore for the components and steel it needs.
             foreach (var w in EnterDebugNode("Roguelike_RenewableCampus", cold)) yield return w;
@@ -687,6 +775,14 @@ namespace Roguelike
             int badBefore = Bad();
             EventUtility.Resolve(fake, caravan, rest, 2);
             SelfTest.Check(Bad() < badBefore, $"rest site: field surgery treats a condition ({badBefore} -> {Bad()})");
+            // Wear builds up node after node; only resting at a rest site clears it.
+            var travelers = caravan.PawnsListForReading.Where(p => p.RaceProps.Humanlike).ToList();
+            foreach (var p in travelers) HealthUtility.AdjustSeverity(p, Wear.Def, 0.65f);
+            var exhausted = travelers.First().health.hediffSet.GetFirstHediffOfDef(Wear.Def);
+            SelfTest.Check(exhausted?.CurStage?.label == "exhausted" && travelers.First().health.capacities.GetLevel(PawnCapacityDefOf.Moving) < 1f,
+                $"wear: at 0.65 a pawn is {exhausted?.CurStage?.label} and slower");
+            EventUtility.Resolve(fake, caravan, rest, 0);
+            SelfTest.Check(travelers.All(p => Wear.Of(p) == 0f), "rest site: resting clears the wear of the road");
 
             // Treasure: forcing the vault gives two relics and hurts someone.
             relics = run.relics.Count;
@@ -1316,7 +1412,7 @@ namespace Roguelike
             foreach (var w in EnterDebugNode("Roguelike_RenewableCampus", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingCold"))) yield return w;
             map = Find.CurrentMap;
             var comp = NodeComp(map);
-            foreach (var def in new[] { "SolarGenerator", "SolarGenerator", "SolarGenerator", "WindTurbine", "WindTurbine", "Battery", "Battery", "Battery", "Battery", "Heater" })
+            foreach (var def in new[] { "SolarGenerator", "SolarGenerator", "SolarGenerator" })
                 SelfTest.Check(SpawnBuilding(map, DefDatabase<ThingDef>.GetNamed(def)), $"renewable campus: placed a {def}");
             BuildRoom(map, 6, 4, comp.squad, null);
             yield return Ticks(300);
