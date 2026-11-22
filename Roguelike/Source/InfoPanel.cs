@@ -38,6 +38,8 @@ namespace Roguelike
         private readonly string title, subtitle;
         private readonly Color accent;
         private readonly List<Section> sections = new List<Section> { new Section() }; // the first has no heading
+        /// <summary>Lines use the small font, or the tiny one when the panel would be taller than the screen.</summary>
+        private GameFont font = GameFont.Small;
 
         public InfoPanel(string title, string subtitle, Color accent)
         {
@@ -63,7 +65,7 @@ namespace Roguelike
 
         private float Height()
         {
-            Text.Font = GameFont.Small;
+            Text.Font = font;
             float h = Pad + 24f + (subtitle.NullOrEmpty() ? 0f : 18f) + 6f;
             foreach (var s in sections.Where(s => s.lines.Count > 0))
             {
@@ -79,7 +81,13 @@ namespace Roguelike
         /// </summary>
         public void Show(Vector2? at = null, int slot = 0)
         {
+            font = GameFont.Small;
             float h = Height();
+            if (h > UI.screenHeight - 8f)
+            {
+                font = GameFont.Tiny;
+                h = Height();
+            }
             var mouse = UI.MousePositionOnUIInverted;
             float x = mouse.x + 18f + Width <= UI.screenWidth - 4f ? mouse.x + 18f : mouse.x - 18f - Width;
             float y = mouse.y + 18f + h <= UI.screenHeight - 4f ? mouse.y + 18f : Mathf.Max(4f, mouse.y - 18f - h);
@@ -115,7 +123,7 @@ namespace Roguelike
                     Style.Box(new Rect(x, y + HeaderH - 2f, w, 1f), new Color(s.color.r, s.color.g, s.color.b, 0.35f));
                     y += HeaderH + 4f;
                 }
-                Text.Font = GameFont.Small;
+                Text.Font = font;
                 foreach (var l in s.lines)
                 {
                     float lh = LineHeight(l);

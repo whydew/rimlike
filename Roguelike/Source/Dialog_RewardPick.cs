@@ -300,7 +300,7 @@ namespace Roguelike
             if (card.kind == RewardKind.Path)
             {
                 DrawPathBody(body, card.pathNode, kind, a);
-                if (hover > 0.5f && Mouse.IsOver(r)) NodeInfo.ForNode(card.pathNode).Show(); // the full briefing, in sections
+                if (Mouse.IsOver(r)) NodeInfo.ForNode(card.pathNode).Show(); // the full briefing, in sections
             }
             else
             {
