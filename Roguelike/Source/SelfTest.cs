@@ -841,6 +841,27 @@ namespace Roguelike
             SelfTest.Check(!MetaProgress.TryBuy(Unlock("Roguelike_Unlock_IceNomads")) && s.points == 1, "can't buy without enough points");
             s.points = before;
 
+            // More pool unlocks: a stacking relic, a gear set, a legendary relic, and a badge for every unlock.
+            var hawk = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_HawksEye");
+            s.unlocked.Add("Roguelike_Unlock_HawksEye");
+            run.AddRelic(hawk);
+            run.AddRelic(hawk);
+            var shooter = map.mapPawns.FreeColonistsSpawned.First();
+            SelfTest.Check(RewardUtility.RelicPool(run).Contains(hawk) && Math.Abs((shooter.health.hediffSet.GetFirstHediffOfDef(hawk.hediff)?.Severity ?? 0f) - 2f) < 0.01f,
+                "stacking relic (Hawk's Eye): picked twice, stack 2, still in the pool");
+            for (int i = 0; i < 4; i++) run.AddRelic(hawk);
+            SelfTest.Check(run.relics.Count(r => r == hawk) == 5 && !RewardUtility.RelicPool(run).Contains(hawk), "stacking relic: caps at 5 stacks and leaves the pool");
+            run.relics.RemoveAll(r => r == hawk);
+            var set = DefDatabase<GearRewardDef>.GetNamed("Roguelike_Gear_MarineSet");
+            int helmets = map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("Apparel_PowerArmorHelmet")).Count;
+            RewardUtility.Apply(new RewardCard { kind = RewardKind.Gear, gear = set }, map);
+            SelfTest.Check(map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("Apparel_PowerArmorHelmet")).Count == helmets + 1, "gear set (marine armor): the helmet comes with the armor");
+            var legendary = new RewardCard { kind = RewardKind.Relic, relic = DefDatabase<RelicDef>.GetNamed("Roguelike_Relic_LuckyCoin") };
+            SelfTest.Check(legendary.KindLabel == "Legendary relic" && legendary.relic.Weight < 1f, "legendary relics are labelled and drawn less often than rare ones");
+            var noBadge = DefDatabase<UnlockDef>.AllDefs.Where(u => ContentFinder<UnityEngine.Texture2D>.Get("Roguelike/Unlocks/" + u.defName.Replace("Roguelike_Unlock_", ""), reportFailure: false) == null).Select(u => u.defName).ToList();
+            SelfTest.Check(noBadge.Count == 0, $"every unlock has its own badge (missing: {string.Join(", ", noBadge)})");
+            s.unlocked.Remove("Roguelike_Unlock_HawksEye");
+
             // Ascension: each level stacks a handicap; winning at the top level unlocks the next.
             int cardsBefore = RewardUtility.Generate(run, RunRewardKind.Cards).Count;
             float weatherBefore = run.WeatherRateFactor, graceBefore = comp.GraceDays;

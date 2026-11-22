@@ -14,8 +14,10 @@ namespace Roguelike
     {
         public ThingDef iconThing;
         public RelicRarity rarity = RelicRarity.Common;
-        /// <summary>Draw weight: common 3, uncommon 2, rare 1.</summary>
-        public float Weight => rarity == RelicRarity.Rare ? 1f : rarity == RelicRarity.Uncommon ? 2f : 3f;
+        /// <summary>Draw weight: common 3, uncommon 2, rare 1, legendary 0.35.</summary>
+        public float Weight => rarity switch { RelicRarity.Legendary => 0.35f, RelicRarity.Rare => 1f, RelicRarity.Uncommon => 2f, _ => 3f };
+        /// <summary>Stays in the pool after it's picked, up to this many copies; each copy raises its hediff's severity by 1.</summary>
+        public int maxStacks = 1;
         public bool starterOnly;
         public bool requiresUnlock;
         public HediffDef hediff;
@@ -43,6 +45,10 @@ namespace Roguelike
         public ThingDef thing;
         public ThingDef stuff;
         public int count = 1;
+        /// <summary>Further items given with the main one, as a set (e.g. a matching helmet).</summary>
+        public List<ThingDef> extraThings = new List<ThingDef>();
+        /// <summary>Draw weight in the gear pool (1 is normal).</summary>
+        public float weight = 1f;
         public bool implant;
         public bool requiresUnlock;
 
@@ -107,7 +113,7 @@ namespace Roguelike
 
         public Color KindColor => kind switch
         {
-            RewardKind.Relic => relic.rarity == RelicRarity.Rare ? new Color(0.95f, 0.55f, 0.15f) : relic.rarity == RelicRarity.Uncommon ? new Color(0.55f, 0.6f, 0.95f) : new Color(0.85f, 0.7f, 0.25f),
+            RewardKind.Relic => relic.rarity == RelicRarity.Legendary ? new Color(0.9f, 0.35f, 0.85f) : relic.rarity == RelicRarity.Rare ? new Color(0.95f, 0.55f, 0.15f) : relic.rarity == RelicRarity.Uncommon ? new Color(0.55f, 0.6f, 0.95f) : new Color(0.85f, 0.7f, 0.25f),
             RewardKind.Gear => new Color(0.45f, 0.6f, 0.8f),
             RewardKind.Implant => new Color(0.3f, 0.75f, 0.7f),
             RewardKind.Blueprint => new Color(0.85f, 0.5f, 0.25f),
@@ -124,7 +130,7 @@ namespace Roguelike
         public const float RecruitChanceInStandardPool = 0.1f;
 
         public static IEnumerable<RelicDef> RelicPool(WorldComponent_RoguelikeRun run) =>
-            DefDatabase<RelicDef>.AllDefs.Where(r => !r.starterOnly && !run.relics.Contains(r) && MetaProgress.IsAvailable(r));
+            DefDatabase<RelicDef>.AllDefs.Where(r => !r.starterOnly && run.relics.Count(o => o == r) < r.maxStacks && MetaProgress.IsAvailable(r));
 
         public static IEnumerable<BlueprintGroupDef> BlueprintPool(WorldComponent_RoguelikeRun run) =>
             DefDatabase<BlueprintGroupDef>.AllDefs.Where(b => !run.blueprints.Contains(b) && MetaProgress.IsAvailable(b));
@@ -181,8 +187,8 @@ namespace Roguelike
             return kind switch
             {
                 RewardKind.Relic => new RewardCard { kind = kind, relic = relics.RandomElementByWeight(r => r.Weight) },
-                RewardKind.Gear => new RewardCard { kind = kind, gear = gear.RandomElement() },
-                RewardKind.Implant => new RewardCard { kind = kind, gear = implants.RandomElement() },
+                RewardKind.Gear => new RewardCard { kind = kind, gear = gear.RandomElementByWeight(g => g.weight) },
+                RewardKind.Implant => new RewardCard { kind = kind, gear = implants.RandomElementByWeight(g => g.weight) },
                 RewardKind.Research => new RewardCard { kind = kind, research = research.RandomElementByWeight(ResearchWeight) },
                 _ => new RewardCard { kind = kind, blueprint = blueprints.RandomElement() },
             };
@@ -221,6 +227,8 @@ namespace Roguelike
                         left -= thing.stackCount;
                         Deliver(thing, map, caravan);
                     }
+                    foreach (var extra in card.gear.extraThings)
+                        Deliver(ThingMaker.MakeThing(extra, extra.MadeFromStuff ? GenStuff.DefaultStuffFor(extra) : null), map, caravan);
                     break;
                 case RewardKind.Recruit:
                     if (card.recruit.Faction != Faction.OfPlayer) card.recruit.SetFaction(Faction.OfPlayer);
@@ -339,7 +347,15 @@ namespace Roguelike
 
         public static void EnsureHediff(Pawn pawn, HediffDef def)
         {
-            if (pawn.health?.hediffSet != null && !pawn.health.hediffSet.HasHediff(def)) pawn.health.AddHediff(def);
+            EnsureHediff(pawn, def, 1);
+        }
+
+        /// <summary>Adds the hediff if missing and sets its severity to the relic's stack count.</summary>
+        public static void EnsureHediff(Pawn pawn, HediffDef def, int stacks)
+        {
+            if (pawn.health?.hediffSet == null) return;
+            var h = pawn.health.hediffSet.GetFirstHediffOfDef(def) ?? pawn.health.AddHediff(def);
+            if (h != null && h.Severity != stacks) h.Severity = stacks;
         }
     }
 

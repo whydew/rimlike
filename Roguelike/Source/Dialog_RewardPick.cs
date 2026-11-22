@@ -226,7 +226,7 @@ namespace Roguelike
                 .OrderBy(d => d is ThingDef { category: ThingCategory.Building } ? 0 : 1).FirstOrDefault(); // buildings first: a smithy says more than an axe
 
         private static bool IsRare(RewardCard card) =>
-            card.kind == RewardKind.Relic && card.relic.rarity == RelicRarity.Rare || card.kind == RewardKind.Path && card.pathNode.IsBoss;
+            card.kind == RewardKind.Relic && card.relic.rarity >= RelicRarity.Rare || card.kind == RewardKind.Path && card.pathNode.IsBoss;
 
         internal static void DrawCard(Rect r, RewardCard card, float hover, float hoverAge, float flash, int index)
         {
@@ -424,10 +424,12 @@ namespace Roguelike
             switch (card.kind)
             {
                 case RewardKind.Relic:
-                    return card.relic.description;
+                    int have = WorldComponent_RoguelikeRun.Get?.relics.Count(o => o == card.relic) ?? 0;
+                    return card.relic.description + (card.relic.maxStacks > 1 ? $"\n\nStacks: you have {have} of {card.relic.maxStacks}." : "");
                 case RewardKind.Gear:
                 case RewardKind.Implant:
-                    return (card.kind == RewardKind.Implant ? "Install with surgery. " : "") + card.gear.thing.description.Split('\n')[0];
+                    return (card.kind == RewardKind.Implant ? "Install with surgery. " : "")
+                           + (card.gear.description.NullOrEmpty() ? card.gear.thing.description.Split('\n')[0] : card.gear.description);
                 case RewardKind.Blueprint:
                     return "Adds to your build menu for this run:\n" + string.Join(", ", card.blueprint.buildings.Select(b => b.label));
                 case RewardKind.Recruit:

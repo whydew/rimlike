@@ -171,5 +171,5 @@ namespace Roguelike
         }
     }
 
-    public enum RelicRarity { Common, Uncommon, Rare }
+    public enum RelicRarity { Common, Uncommon, Rare, Legendary }
 }

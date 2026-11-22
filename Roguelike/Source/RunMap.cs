@@ -131,7 +131,7 @@ namespace Roguelike
 
         public void AddRelic(RelicDef relic)
         {
-            if (relic == null || relics.Contains(relic)) return;
+            if (relic == null || relics.Count(r => r == relic) >= relic.maxStacks) return;
             relics.Add(relic);
             ApplyRelicHediffs();
         }
@@ -139,11 +139,11 @@ namespace Roguelike
         /// <summary>Gives every colonist (including newcomers) the status effects of hediff relics.</summary>
         public void ApplyRelicHediffs()
         {
-            var defs = relics.Where(r => r.hediff != null).Select(r => r.hediff).ToList();
+            var defs = relics.Where(r => r.hediff != null).GroupBy(r => r.hediff).Select(g => (def: g.Key, stacks: g.Count())).ToList();
             if (defs.Count == 0) return;
             foreach (var pawn in PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_Colonists)
-                foreach (var def in defs)
-                    RelicEffects.EnsureHediff(pawn, def);
+                foreach (var (def, stacks) in defs)
+                    RelicEffects.EnsureHediff(pawn, def, stacks);
         }
 
         /// <summary>Opens the reward screen for a just-cleared node.</summary>

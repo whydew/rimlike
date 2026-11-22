@@ -147,6 +147,7 @@ Passive effects for the whole run. Examples:
 
 Each run unlocks a bit more for the next one, through points earned per node cleared. Both kinds of unlock:
 - **Variety:** new blueprints, relics, starters and xenotypes added to the draft pools.
+  Relics come in four rarities (common, uncommon, rare, legendary); a few, like Hawk's Eye, can be picked again and stack.
 - **Power:** permanent upgrades such as better starting gear.
 
 **Ascension** balances power creep. After a win, players can start runs at a higher Ascension level. Each level adds one stacking handicap, such as threat modifiers that ramp faster, tougher elites, fewer reward choices, or worse starting gear. Ascension is not part of the MVP.

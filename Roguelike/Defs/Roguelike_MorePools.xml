@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===================== More pool unlocks (variety) =====================
+    Each unlock adds one gear item, implant, relic or blueprint group to its reward pool. -->
+
+  <!-- Gear -->
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_ChargeLance</defName><thing>Gun_ChargeLance</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_Minigun</defName><thing>Gun_Minigun</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_FragGrenades</defName><thing>Weapon_GrenadeFrag</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_EmpLauncher</defName><thing>Gun_EmpLauncher</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Gear_IncendiaryLauncher</defName><thing>Gun_IncendiaryLauncher</thing><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef>
+    <defName>Roguelike_Gear_MarineSet</defName>
+    <label>marine armor set</label>
+    <description>Marine armor and a marine helmet: heavy powered armor for the front line.</description>
+    <thing>Apparel_PowerArmor</thing>
+    <extraThings><li>Apparel_PowerArmorHelmet</li></extraThings>
+    <weight>0.35</weight>
+    <requiresUnlock>true</requiresUnlock>
+  </Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef>
+    <defName>Roguelike_Gear_GoJuice</defName>
+    <description>Enough go-juice to keep the squad dosed for the rest of the run: faster, tougher and fearless, at the risk of addiction.</description>
+    <thing>GoJuice</thing>
+    <count>100</count>
+    <requiresUnlock>true</requiresUnlock>
+  </Roguelike.GearRewardDef>
+
+  <!-- Implants -->
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicHeart</defName><thing>BionicHeart</thing><implant>true</implant><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+  <Roguelike.GearRewardDef><defName>Roguelike_Implant_BionicStomach</defName><thing>BionicStomach</thing><implant>true</implant><requiresUnlock>true</requiresUnlock></Roguelike.GearRewardDef>
+
+  <!-- Relics -->
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_HawksEye</defName>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Hawk's Eye</label>
+    <description>Colonists shoot 5% more accurately. Can be picked again, up to 5 times (+25%).</description>
+    <iconThing>BionicEye</iconThing>
+    <maxStacks>5</maxStacks>
+    <hediff>Roguelike_RelicEffect_HawksEye</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_IronStomach</defName>
+    <rarity>Uncommon</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Iron Stomach</label>
+    <description>Colonists get hungry 25% slower.</description>
+    <iconThing>Pemmican</iconThing>
+    <hediff>Roguelike_RelicEffect_IronStomach</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_FieldSurgeon</defName>
+    <rarity>Uncommon</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Field Surgeon's Roll</label>
+    <description>Colonists tend wounds 20% better and 30% faster.</description>
+    <iconThing>MedicineIndustrial</iconThing>
+    <hediff>Roguelike_RelicEffect_FieldSurgeon</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_BuildersLevel</defName>
+    <rarity>Rare</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Builder's Level</label>
+    <description>Colonists build 25% faster.</description>
+    <iconThing>Steel</iconThing>
+    <hediff>Roguelike_RelicEffect_BuildersLevel</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_DownPillow</defName>
+    <rarity>Legendary</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Down Pillow</label>
+    <description>Colonists rest 20% faster when they sleep.</description>
+    <iconThing>Cloth</iconThing>
+    <hediff>Roguelike_RelicEffect_DownPillow</hediff>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_MerchantsLedger</defName>
+    <rarity>Legendary</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Merchant's Ledger</label>
+    <description>Merchants sell to you at half price.</description>
+    <iconThing>Silver</iconThing>
+    <shopDiscount>0.5</shopDiscount>
+  </Roguelike.RelicDef>
+
+  <Roguelike.RelicDef>
+    <defName>Roguelike_Relic_LuckyCoin</defName>
+    <rarity>Legendary</rarity>
+    <requiresUnlock>true</requiresUnlock>
+    <label>Lucky Coin</label>
+    <description>One more card to choose from on every reward.</description>
+    <iconThing>Gold</iconThing>
+    <extraRewardChoices>1</extraRewardChoices>
+  </Roguelike.RelicDef>
+
+  <!-- Relic effects. Stacking relics set severity to their stack count, so each stage is one stack. -->
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_HawksEye</defName>
+    <label>relic: hawk's eye</label>
+    <description>A run relic sharpens this colonist's aim. It stacks.</description>
+    <initialSeverity>1</initialSeverity>
+    <stages>
+      <li><minSeverity>0</minSeverity><statOffsets><ShootingAccuracyPawn>0.05</ShootingAccuracyPawn></statOffsets></li>
+      <li><minSeverity>1.5</minSeverity><label>x2</label><statOffsets><ShootingAccuracyPawn>0.10</ShootingAccuracyPawn></statOffsets></li>
+      <li><minSeverity>2.5</minSeverity><label>x3</label><statOffsets><ShootingAccuracyPawn>0.15</ShootingAccuracyPawn></statOffsets></li>
+      <li><minSeverity>3.5</minSeverity><label>x4</label><statOffsets><ShootingAccuracyPawn>0.20</ShootingAccuracyPawn></statOffsets></li>
+      <li><minSeverity>4.5</minSeverity><label>x5</label><statOffsets><ShootingAccuracyPawn>0.25</ShootingAccuracyPawn></statOffsets></li>
+    </stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_IronStomach</defName>
+    <label>relic: iron stomach</label>
+    <description>A run relic makes this colonist get hungry slower.</description>
+    <stages><li><hungerRateFactor>0.75</hungerRateFactor></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_FieldSurgeon</defName>
+    <label>relic: field surgeon's roll</label>
+    <description>A run relic helps this colonist tend wounds.</description>
+    <stages><li><statOffsets><MedicalTendQuality>0.2</MedicalTendQuality><MedicalTendSpeed>0.3</MedicalTendSpeed></statOffsets></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_BuildersLevel</defName>
+    <label>relic: builder's level</label>
+    <description>A run relic makes this colonist build faster.</description>
+    <stages><li><statFactors><ConstructionSpeed>1.25</ConstructionSpeed></statFactors></li></stages>
+  </HediffDef>
+
+  <HediffDef ParentName="Roguelike_RelicEffectBase">
+    <defName>Roguelike_RelicEffect_DownPillow</defName>
+    <label>relic: down pillow</label>
+    <description>A run relic helps this colonist rest.</description>
+    <stages><li><statFactors><RestRateMultiplier>1.2</RestRateMultiplier></statFactors></li></stages>
+  </HediffDef>
+
+  <!-- Blueprints -->
+  <Roguelike.BlueprintGroupDef>
+    <defName>Roguelike_BP_HeavyDefenses</defName>
+    <label>Heavy defenses</label>
+    <description>Autocannon and sniper turrets, and high-explosive IED traps.</description>
+    <buildings><li>Turret_Autocannon</li><li>Turret_Sniper</li><li>TrapIED_HighExplosive</li></buildings>
+    <requiresUnlock>true</requiresUnlock>
+  </Roguelike.BlueprintGroupDef>
+
+  <!-- Unlocks -->
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_ChargeLance</defName><label>Gear: Charge lance</label><description>Adds the charge lance to the gear pool.</description><cost>4</cost><gear>Roguelike_Gear_ChargeLance</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_Minigun</defName><label>Gear: Minigun</label><description>Adds the minigun to the gear pool.</description><cost>4</cost><gear>Roguelike_Gear_Minigun</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_FragGrenades</defName><label>Gear: Frag grenades</label><description>Adds frag grenades to the gear pool. They never run out.</description><cost>3</cost><gear>Roguelike_Gear_FragGrenades</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_EmpLauncher</defName><label>Gear: EMP launcher</label><description>Adds the EMP launcher to the gear pool.</description><cost>3</cost><gear>Roguelike_Gear_EmpLauncher</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_IncendiaryLauncher</defName><label>Gear: Incendiary launcher</label><description>Adds the incendiary launcher to the gear pool.</description><cost>3</cost><gear>Roguelike_Gear_IncendiaryLauncher</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_MarineSet</defName><label>Gear: Marine armor set</label><description>Adds marine armor and helmet, as a rare set, to the gear pool.</description><cost>5</cost><gear>Roguelike_Gear_MarineSet</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_GoJuice</defName><label>Gear: Go-juice crate</label><description>Adds a crate of 100 go-juice to the gear pool.</description><cost>3</cost><gear>Roguelike_Gear_GoJuice</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_BionicHeart</defName><label>Implant: Bionic heart</label><description>Adds the bionic heart to the implant pool.</description><cost>3</cost><gear>Roguelike_Implant_BionicHeart</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_BionicStomach</defName><label>Implant: Bionic stomach</label><description>Adds the bionic stomach to the implant pool.</description><cost>2</cost><gear>Roguelike_Implant_BionicStomach</gear></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_HawksEye</defName><label>Relic: Hawk's Eye</label><description>Adds Hawk's Eye to the relic pool. It keeps coming back and stacks.</description><cost>3</cost><relic>Roguelike_Relic_HawksEye</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_IronStomach</defName><label>Relic: Iron Stomach</label><description>Adds Iron Stomach to the relic pool.</description><cost>3</cost><relic>Roguelike_Relic_IronStomach</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_FieldSurgeon</defName><label>Relic: Field Surgeon's Roll</label><description>Adds the Field Surgeon's Roll to the relic pool.</description><cost>4</cost><relic>Roguelike_Relic_FieldSurgeon</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_BuildersLevel</defName><label>Relic: Builder's Level</label><description>Adds the Builder's Level (rare) to the relic pool.</description><cost>3</cost><relic>Roguelike_Relic_BuildersLevel</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_DownPillow</defName><label>Relic: Down Pillow</label><description>Adds the Down Pillow (legendary) to the relic pool.</description><cost>2</cost><relic>Roguelike_Relic_DownPillow</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_MerchantsLedger</defName><label>Relic: Merchant's Ledger</label><description>Adds the Merchant's Ledger (legendary) to the relic pool.</description><cost>3</cost><relic>Roguelike_Relic_MerchantsLedger</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_LuckyCoin</defName><label>Relic: Lucky Coin</label><description>Adds the Lucky Coin (legendary) to the relic pool.</description><cost>5</cost><relic>Roguelike_Relic_LuckyCoin</relic></Roguelike.UnlockDef>
+  <Roguelike.UnlockDef><defName>Roguelike_Unlock_BP_HeavyDefenses</defName><label>Blueprints: Heavy defenses</label><description>Adds the Heavy defenses blueprint group to the draft pool.</description><cost>5</cost><blueprint>Roguelike_BP_HeavyDefenses</blueprint></Roguelike.UnlockDef>
+
+</Defs>
