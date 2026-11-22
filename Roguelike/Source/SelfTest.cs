@@ -420,7 +420,20 @@ namespace Roguelike
         /// Builds a roofed room with walls (granite blocks unless <paramref name="stuff"/> is given), one door and
         /// <paramref name="beds"/> beds, or a table and chairs for a dining room. Returns the walls placed.
         /// </summary>
-        private static int BuildRoom(Map map, int innerW, int innerH, int beds, ThingDef stuff, bool dining = false)
+        /// <summary>One granite wall on a random free cell; 1 if placed.</summary>
+        private static readonly List<Thing> looseWalls = new List<Thing>();
+
+        private static int SpawnStoneWall(Map map)
+        {
+            if (!CellFinder.TryFindRandomCell(map, c => c.Standable(map) && c.GetEdifice(map) == null && c.GetFirstPawn(map) == null && !c.CloseToEdge(map, 5), out var cell)) return 0;
+            var b = ThingMaker.MakeThing(ThingDefOf.Wall, DefDatabase<ThingDef>.GetNamed("BlocksGranite"));
+            b.SetFaction(Faction.OfPlayer);
+            GenSpawn.Spawn(b, cell, map, WipeMode.Vanish);
+            looseWalls.Add(b);
+            return 1;
+        }
+
+        private static int BuildRoom(Map map, int innerW, int innerH, int beds, ThingDef stuff, bool dining = false, bool art = false)
         {
             stuff ??= DefDatabase<ThingDef>.GetNamed("BlocksGranite");
             int w = innerW + 2, h = innerH + 2;
@@ -456,6 +469,14 @@ namespace Roguelike
                 var chair = ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("DiningChair"), ThingDefOf.WoodLog);
                 chair.SetFaction(Faction.OfPlayer);
                 GenSpawn.Spawn(chair, inner.CenterCell + new IntVec3(0, 0, -1), map, Rot4.North, WipeMode.Vanish);
+            }
+            if (art)
+            {
+                // A legendary gold sculpture in the corner makes the room impressive.
+                var sculpture = ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("SculptureSmall"), ThingDefOf.Gold);
+                sculpture.TryGetComp<CompQuality>()?.SetQuality(QualityCategory.Legendary, ArtGenerationContext.Colony);
+                sculpture.SetFaction(Faction.OfPlayer);
+                GenSpawn.Spawn(sculpture, new IntVec3(inner.maxX, 0, inner.maxZ), map, WipeMode.Vanish);
             }
             return walls;
         }
@@ -548,7 +569,7 @@ namespace Roguelike
             yield return Ticks(300);
             SelfTest.Check(comp.completed, "granary: completes once the minimum stay has passed");
 
-            // Stone fortress: only stone walls count.
+            // Stone fortress: only stone walls count, and the walls must then be held for 10 days.
             foreach (var w in EnterDebugNode("Roguelike_StoneFortress", cold)) yield return w;
             map = Find.CurrentMap;
             comp = NodeComp(map);
@@ -557,28 +578,56 @@ namespace Roguelike
             yield return Ticks(60);
             SelfTest.Check(woodWalls > 0 && comp.Have(walls) == 0, $"stone fortress: {woodWalls} wooden walls don't count as stone");
             int stone = 0, doorsBuilt = 0;
-            while (stone < 200) stone += BuildRoom(map, 5, 5, comp.squad, null);
+            SelfTest.Check(comp.enemyFaction != null && comp.nextPatrolTick > 0, "stone fortress: patrols are scheduled to test the walls");
+            BuildRoom(map, 5, 5, comp.squad, null); // shelter
+            stone = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Wall).Count(x => x.Stuff != ThingDefOf.WoodLog);
+            for (int tries = 0; stone < walls.Target(comp.squad) && tries < 5000; tries++) stone += SpawnStoneWall(map);
             doorsBuilt = map.listerBuildings.AllBuildingsColonistOfDef(ThingDefOf.Door).Count();
-            while (doorsBuilt < 8) { BuildRoom(map, 2, 2, 0, null); doorsBuilt++; }
+            while (doorsBuilt < 12) { BuildRoom(map, 2, 2, 0, null); doorsBuilt++; }
             yield return Ticks(300);
-            SelfTest.Check(comp.Have(walls) >= 200 && comp.RequirementsMet, $"stone fortress: requirements met ({comp.ProgressText})");
+            int wallIndex = comp.preset.requirements.IndexOf(walls);
+            SelfTest.Check(comp.Have(walls) >= walls.Target(comp.squad) && !comp.RequirementsMet && comp.heldDays[wallIndex] > 0f && comp.ProgressText.Contains("held"),
+                $"stone fortress: walls built, the hold clock runs but isn't done ({comp.ProgressText})");
+            float heldBefore = comp.heldDays[wallIndex];
+            var someWalls = looseWalls.Where(x => x.Spawned).Take(comp.Have(walls) - walls.Target(comp.squad) + 5).ToList();
+            foreach (var wall in someWalls) wall.Destroy();
+            yield return Ticks(600);
+            SelfTest.Check(Math.Abs(comp.heldDays[wallIndex] - heldBefore) < 0.001f, "hold: the clock pauses (doesn't reset) while the walls are short");
+            for (int tries = 0; tries < 50 && comp.Have(walls) < walls.Target(comp.squad); tries++) SpawnStoneWall(map);
+            comp.heldDays[wallIndex] = walls.holdDays - 0.001f;
+            yield return Ticks(300);
+            SelfTest.Check(comp.RequirementsMet, $"stone fortress: requirements met once held for {walls.holdDays} days ({comp.ProgressText})");
             comp.startTick -= (int)(comp.preset.minDays * GenDate.TicksPerDay);
             yield return Ticks(300);
             SelfTest.Check(comp.completed, "stone fortress: completes after the minimum stay");
 
-            // Private quarters: bedrooms and a dining room.
+            // Private quarters: bedrooms and a dining room, plain ones first, then impressive ones.
             foreach (var w in EnterDebugNode("Roguelike_PrivateQuarters", cold)) yield return w;
             map = Find.CurrentMap;
             comp = NodeComp(map);
-            for (int i = 0; i < comp.squad; i++) BuildRoom(map, 4, 4, 1, null);
-            BuildRoom(map, 7, 6, 0, null, dining: true);
-            yield return Ticks(300);
             var bedrooms = comp.preset.requirements.First(r => r.kind == RequirementKind.Bedrooms);
             var dining = comp.preset.requirements.First(r => r.kind == RequirementKind.DiningRoom);
-            SelfTest.Check(comp.Have(bedrooms) >= comp.squad, $"private quarters: {comp.Have(bedrooms)} bedrooms recognized");
-            SelfTest.Check(comp.Have(dining) == 1, "private quarters: the dining room is recognized");
+            BuildRoom(map, 4, 4, 1, null);
+            BuildRoom(map, 7, 6, 0, null, dining: true);
+            yield return Ticks(300);
+            SelfTest.Check(comp.Have(bedrooms) == 0 && comp.Have(dining) == 0, "private quarters: plain rooms don't meet the quality bar");
+            for (int i = 0; i < comp.squad; i++) BuildRoom(map, 4, 4, 1, null, art: true);
+            BuildRoom(map, 7, 6, 0, null, dining: true, art: true);
+            yield return Ticks(300);
+            string scores = string.Join(", ", map.regionGrid.AllRooms.Where(r => r.ProperRoom && r.Role != null).Select(r => $"{r.Role.label} {r.GetStat(RoomStatDefOf.Impressiveness):0}"));
+            SelfTest.Check(comp.Have(bedrooms) >= comp.squad, $"private quarters: {comp.Have(bedrooms)} impressive bedrooms recognized ({scores})");
+            SelfTest.Check(comp.Have(dining) == 1, "private quarters: the impressive dining room is recognized");
+            SelfTest.Check(bedrooms.Card(comp.squad).Contains("slightly impressive"), $"private quarters: the card names the quality ({bedrooms.Card(comp.squad)})");
             Find.CameraDriver.JumpToCurrentMapLoc(map.mapPawns.FreeColonistsSpawned.First().Position);
             foreach (var w in Screenshot("s7_rooms", world: false)) yield return w;
+
+            // Renewable campus: the map holds enough ore for the components and steel it needs.
+            foreach (var w in EnterDebugNode("Roguelike_RenewableCampus", cold)) yield return w;
+            map = Find.CurrentMap;
+            int CanMine(ThingDef res) => RequirementUtility.CountOnMap(map, res) + map.listerThings.AllThings
+                .Where(t => t.def.building?.mineableThing == res).Sum(t => t.def.building.EffectiveMineableYield);
+            int components = CanMine(ThingDefOf.ComponentIndustrial), steel = CanMine(ThingDefOf.Steel);
+            SelfTest.Check(components >= 24 && steel >= 900, $"renewable campus: enough to mine ({components} components, {steel} steel)");
 
             // Seasonal endurance under a psychic drone: a death fails it.
             var psychic = DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingPsychic");
@@ -1222,7 +1271,7 @@ namespace Roguelike
             foreach (var w in EnterDebugNode("Roguelike_RenewableCampus", DefDatabase<GameConditionDef>.GetNamed("Roguelike_EscalatingCold"))) yield return w;
             map = Find.CurrentMap;
             var comp = NodeComp(map);
-            foreach (var def in new[] { "SolarGenerator", "SolarGenerator", "WindTurbine", "Battery", "Battery", "Battery", "Heater" })
+            foreach (var def in new[] { "SolarGenerator", "SolarGenerator", "SolarGenerator", "WindTurbine", "WindTurbine", "Battery", "Battery", "Battery", "Battery", "Heater" })
                 SelfTest.Check(SpawnBuilding(map, DefDatabase<ThingDef>.GetNamed(def)), $"renewable campus: placed a {def}");
             BuildRoom(map, 6, 4, comp.squad, null);
             yield return Ticks(300);

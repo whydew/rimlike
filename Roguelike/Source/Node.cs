@@ -57,6 +57,8 @@ namespace Roguelike
         /// <summary>Base-building objective: every requirement must be met, after at least minDays on the node.</summary>
         public List<NodeRequirement> requirements = new List<NodeRequirement>();
         public float minDays;
+        /// <summary>Mineable resources the objective needs (e.g. components): the node map gets enough ore to mine them.</summary>
+        public List<ThingDefCountClass> ensureMineable = new List<ThingDefCountClass>();
 
         // ---------- Eligibility: only offer objectives the squad can actually do ----------
         /// <summary>Blueprint groups that must be drafted this run.</summary>
@@ -315,6 +317,8 @@ namespace Roguelike
         public List<Pawn> entrySquad = new List<Pawn>();
         /// <summary>How much of each produced item was already here on arrival.</summary>
         private Dictionary<ThingDef, int> baselines = new Dictionary<ThingDef, int>();
+        /// <summary>Days each requirement (by index) has been met so far, for requirements with holdDays.</summary>
+        public List<float> heldDays = new List<float>();
         public int startTick;
         public bool completed;
         public bool failed;
@@ -355,6 +359,34 @@ namespace Roguelike
 
         public int Have(NodeRequirement r) => RequirementUtility.Have(this, r);
 
+        private float Held(NodeRequirement r)
+        {
+            int i = preset.requirements.IndexOf(r);
+            return i >= 0 && i < heldDays.Count ? heldDays[i] : 0f;
+        }
+
+        /// <summary>Met now, or for a held requirement, met for long enough in total.</summary>
+        public bool Met(NodeRequirement r) => r.holdDays > 0f ? Held(r) >= r.holdDays : Have(r) >= r.Target(squad);
+
+        /// <summary>0..1 toward one requirement: the count, then (if held) the days held.</summary>
+        private float RequirementProgress(NodeRequirement r)
+        {
+            if (Met(r)) return 1f;
+            float count = Mathf.Clamp01(Have(r) / (float)r.Target(squad));
+            return r.holdDays > 0f ? 0.5f * count + 0.5f * Mathf.Clamp01(Held(r) / r.holdDays) : count;
+        }
+
+        /// <summary>Adds time to held requirements that are met right now.</summary>
+        private void TickHolds(float days)
+        {
+            while (heldDays.Count < preset.requirements.Count) heldDays.Add(0f);
+            for (int i = 0; i < preset.requirements.Count; i++)
+            {
+                var r = preset.requirements[i];
+                if (r.holdDays > 0f && heldDays[i] < r.holdDays && Have(r) >= r.Target(squad)) heldDays[i] += days;
+            }
+        }
+
         public int EnemiesLeft => enemyFaction == null ? 0
             : map.mapPawns.SpawnedPawnsInFaction(enemyFaction).Count(p => !p.Dead && !p.Downed);
 
@@ -370,7 +402,7 @@ namespace Roguelike
             ObjectiveKind.Survive or ObjectiveKind.Escort => Mathf.Clamp01(Days / preset.surviveDays),
             ObjectiveKind.KillAll => initialEnemies == 0 ? 0f : Mathf.Clamp01(1f - EnemiesLeft / (float)initialEnemies),
             ObjectiveKind.Requirements => preset.requirements.Count == 0 ? 1f
-                : preset.requirements.Average(r => Mathf.Clamp01(Have(r) / (float)r.Target(squad))),
+                : preset.requirements.Average(RequirementProgress),
             _ => 0f,
         };
 
@@ -384,7 +416,7 @@ namespace Roguelike
             ObjectiveKind.Survive => Days >= preset.surviveDays,
             ObjectiveKind.Escort => Days >= preset.surviveDays && EscortAlive,
             ObjectiveKind.KillAll => initialEnemies > 0 && EnemiesLeft == 0,
-            ObjectiveKind.Requirements => preset.requirements.All(r => Have(r) >= r.Target(squad)),
+            ObjectiveKind.Requirements => preset.requirements.All(Met),
             _ => false,
         };
 
@@ -401,7 +433,7 @@ namespace Roguelike
                     ObjectiveKind.Survive => $"hold out {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
                     ObjectiveKind.Escort => $"escort {Mathf.Min(Days, preset.surviveDays):0.0}/{preset.surviveDays:0.#} days",
                     ObjectiveKind.KillAll => $"{EnemiesLeft}/{initialEnemies} enemies left",
-                    ObjectiveKind.Requirements => string.Join(", ", preset.requirements.Select(r => r.Short(squad, Have(r)))),
+                    ObjectiveKind.Requirements => string.Join(", ", preset.requirements.Select(r => r.Short(squad, Have(r), Held(r)))),
                     _ => "",
                 };
                 if (preset.minDays > 0f) text += $", day {Mathf.Min(Days, preset.minDays):0}/{preset.minDays:0}";
@@ -438,6 +470,8 @@ namespace Roguelike
             baselines.Clear();
             foreach (var r in p.requirements.Where(r => r.kind == RequirementKind.Produce && r.thing != null))
                 baselines[r.thing] = RequirementUtility.CountOnMap(map, r.thing);
+            heldDays = p.requirements.Select(_ => 0f).ToList();
+            foreach (var res in p.ensureMineable) RequirementUtility.EnsureMineable(map, res.thingDef, res.count);
 
             if (p.assault && map.Parent is Settlement { Faction: not null } enemyBase && !enemyBase.Faction.IsPlayer)
                 enemyFaction = enemyBase.Faction; // the base's defenders are the enemy
@@ -457,6 +491,7 @@ namespace Roguelike
                     SpawnEscort();
                     break;
             }
+            if (p.patrolIntervalDays > 0f && enemyFaction == null) PickEnemyFaction(); // expeditions with patrols: someone tests the defenses
             if (p.patrolIntervalDays > 0f) nextPatrolTick = startTick + (int)(p.patrolIntervalDays * GenDate.TicksPerDay);
             if (p.reinforcementDays > 0f) reinforcementTick = startTick + (int)(p.reinforcementDays * GenDate.TicksPerDay);
             initialEnemies = Mathf.Max(initialEnemies, EnemiesLeft);
@@ -477,6 +512,7 @@ namespace Roguelike
                 return;
             }
             initialEnemies = Mathf.Max(initialEnemies, EnemiesLeft);
+            if (preset.objective == ObjectiveKind.Requirements) TickHolds(UpdateInterval / (float)GenDate.TicksPerDay);
             if (ObjectiveMet)
             {
                 Complete();
@@ -672,6 +708,8 @@ namespace Roguelike
             Scribe_Values.Look(ref squad, "squad", 3);
             Scribe_Collections.Look(ref entrySquad, "entrySquad", LookMode.Reference);
             Scribe_Collections.Look(ref baselines, "baselines", LookMode.Def, LookMode.Value);
+            Scribe_Collections.Look(ref heldDays, "heldDays", LookMode.Value);
+            heldDays ??= new List<float>();
             entrySquad ??= new List<Pawn>();
             baselines ??= new Dictionary<ThingDef, int>();
         }

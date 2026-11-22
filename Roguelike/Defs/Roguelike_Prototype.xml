@@ -118,8 +118,11 @@
                      toxic buildup per day for toxic, drone levels per day for psychic.
     graceDays, targetDays, paceSensitivity, minPaceFactor, maxPaceFactor: the pace-driven clock.
     tileTemperature: world-tile average temperatures (°C) the preset fits.
-    threatScale, patrolIntervalDays, reinforcementDays: enemy pressure.
+    threatScale, patrolIntervalDays, reinforcementDays: enemy pressure (patrols on an expedition pick a raiding faction).
     weight:          relative chance among presets of the same kind.
+    requirements:    (objective Requirements) each may add minImpressiveness (rooms: 40 decent, 50 slightly, 65 somewhat
+                     impressive) and holdDays (met for that many days in total; the clock pauses, not resets, when it isn't).
+    ensureMineable:  e.g. <Steel>900</Steel>: the node map gets enough ore to mine that much.
   -->
 
   <!-- Expeditions: classic base building. Each takes roughly 25-45 in-game days (see docs/research/rimworld-early-game-pacing.md):
@@ -187,10 +190,11 @@
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_StoneFortress</defName>
     <label>stone fortress</label>
-    <description>Rocky ground and long nights. Cut stone and raise a real fortress.</description>
+    <description>Rocky ground, long nights and raiders who probe the walls. Cut stone, raise a real fortress and hold it.</description>
+    <patrolIntervalDays>5</patrolIntervalDays>
     <requirements>
-      <li><kind>Build</kind><thing>Wall</thing><count>200</count><stuffCategory>Stony</stuffCategory></li>
-      <li><kind>Build</kind><thing>Door</thing><count>8</count></li>
+      <li><kind>Build</kind><thing>Wall</thing><count>300</count><stuffCategory>Stony</stuffCategory><holdDays>10</holdDays></li>
+      <li><kind>Build</kind><thing>Door</thing><count>12</count></li>
       <li><kind>Shelter</kind><count>1</count><perColonist>true</perColonist></li>
     </requirements>
   </Roguelike.NodePresetDef>
@@ -198,10 +202,10 @@
   <Roguelike.NodePresetDef ParentName="Roguelike_BaseExpedition">
     <defName>Roguelike_PrivateQuarters</defName>
     <label>private quarters</label>
-    <description>Settle in properly: a bedroom for everyone and a shared dining room.</description>
+    <description>Settle in properly: a fine bedroom for everyone and a dining room worth gathering in.</description>
     <requirements>
-      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells></li>
-      <li><kind>DiningRoom</kind><minCells>25</minCells></li>
+      <li><kind>Bedrooms</kind><count>1</count><perColonist>true</perColonist><minCells>12</minCells><minImpressiveness>50</minImpressiveness></li>
+      <li><kind>DiningRoom</kind><minCells>25</minCells><minImpressiveness>65</minImpressiveness></li>
     </requirements>
   </Roguelike.NodePresetDef>
 
